@@ -1,0 +1,119 @@
+# Omniscience Intel
+
+A personalized world-news intelligence map. Top stories render as glowing markers
+at their real geographic location on a dark tactical world map (Black Ops /
+Palantir Gotham vibe). Each story carries a tri-state control that drives an
+evolving personalization profile stored in your browser.
+
+Standalone static app: HTML + CSS + vanilla JS with Leaflet for the map. No build
+step and no backend required. An optional serverless endpoint adds live,
+web-grounded refresh. (Originally prototyped on the Base44 builder, then
+reimplemented here as a self-contained app so it runs without Base44.)
+
+## Run locally
+
+Any static server works, for example:
+
+    python3 -m http.server 8099
+    # then open http://localhost:8099
+
+Map tiles and fonts load from CDNs, so the browser needs internet. The 19 seed
+stories are bundled in `data.js` and work offline.
+
+## Deploy (Vercel)
+
+Push to the repo. Vercel serves the static root and the `/api` function
+automatically, no config needed. This repo is already wired to Vercel, so each
+push redeploys the preview.
+
+## Live refresh (optional)
+
+By default, REFRESH FEED runs on the bundled dataset and reports "no live source
+configured". To enable live, web-grounded news:
+
+- Set `ANTHROPIC_API_KEY` in the Vercel project env (optionally `OMNI_MODEL`).
+- `api/news.js` then uses Claude with the web-search tool to return current,
+  geolocated stories as JSON; the app merges them in (additive, deduped by title,
+  blocked topics skipped).
+
+Live AI output should be sanity-checked. For hard sourcing, swap `api/news.js` for
+a real news API and geocode results there.
+
+## Tactical tracking (TRACKS button)
+
+`api/tracks.js` returns live aircraft worldwide from the free OpenSky Network API
+(no key; up to 2000 rendered on a Leaflet canvas layer for performance; anonymous
+is rate limited, so it falls back to sample positions on failure).
+Optional `OPENSKY_USER` / `OPENSKY_PASS` env raises limits. Oil tankers are
+representative SAMPLE positions at major chokepoints; real global AIS needs a
+keyed feed (wire one in `api/tracks.js`, e.g. `AISSTREAM_API_KEY`) to go live.
+
+## Features
+
+- World-map command center: dark CARTO basemap, cyan lat/long grid, scanlines,
+  corner brackets. Markers are colored by category (geopolitics amber, markets
+  cyan, technology teal, science green) and sized/pulsing by priority; overlapping
+  markers are jittered.
+- Dossier panel on marker or feed click: title, coordinates, source, date,
+  summary, tags, and the tri-state control.
+- Tri-state per story: NONE; MORE INTEL (tick) expands `detailed_intel` and boosts
+  the topic; SUPPRESS (cross) hides it and blocks the topic.
+- Personalization: ranks and filters against your interest profile, removes
+  blocked topics, keeps a PRIORITY FEED rail synced with the map, category
+  filters, feed search, a marker legend, and a suppressed-topics list with
+  one-click restore. A Reset Profile control restores the baseline.
+- SUPPRESS blocks the story's specific tags (exact match), not its whole
+  category, so muting one story does not wipe an unrelated topic. Scoring uses
+  exact token overlap (no loose substring matching).
+- Interactive countries: clicking a country opens a brief with the latest stories
+  for that country (point-in-polygon), always shown in full regardless of your
+  personalization/suppression, and pulls fresh country news when a key is set.
+- Sound: synthesized WebAudio cues for select / tick / cross / refresh / country /
+  toggles (SOUND button, persisted). A slow radar sweep adds the control-room feel.
+- Advanced controls (FX, LINKS, EXPORT, IMPORT, RESET) live in the MANUAL panel
+  to keep the main view clean; the map shows only TRACKS, INTEL, SOUND, MANUAL.
+- Map controls: LINKS (topic connection lines), TRACKS (aircraft + tanker
+  overlay), INTEL ONLY (show only flagged stories), a lat/long graticule, a
+  day/night terminator, and low-zoom marker clustering. Plus a marker legend,
+  per-item relevance bars, keyboard nav (j/k or arrows), and a persisted map view.
+- Feed controls: sort (relevance / new / priority), a recency window
+  (24h/72h/7d/all), a critical-only filter, search, a per-category SIGNAL
+  BREAKDOWN, region quick-jump, dossier COPY LINK, and a mobile feed drawer.
+- Auto-refresh on load when the feed is stale (>30 min) and a live source has
+  worked before.
+- Operations manual overlay (`?` key or MANUAL button), an FX toggle that also
+  honours `prefers-reduced-motion`, profile EXPORT / IMPORT as JSON, shareable
+  permalinks (`#s=<id>`), and an installable PWA (manifest + icon). Offline-capable
+  via a network-first service worker; dialog roles, focus management, and
+  focus-visible outlines for keyboard and screen-reader use.
+- State persists in `localStorage` (profile, per-story reactions, live cache,
+  last view, last refresh, FX preference).
+
+## Files
+
+- `index.html`, `styles.css`, `app.js`
+- `data.js` - bundled stories + seed interest profile
+- `api/news.js` - optional live news endpoint (country-aware; safe fallback)
+- `api/tracks.js` - aircraft (OpenSky) + sample tanker endpoint
+- `manifest.json`, `icon.svg`, `sw.js` - PWA manifest, app icon, service worker
+
+## Data model (per story)
+
+`title`, `summary`, `detailed_intel`, `category` (geopolitics|markets|technology|
+science), `source`, `location_name`, `lat`, `lng`, `priority`
+(critical|high|medium|low), `tags[]`, `published_date`.
+
+## Personalization seed
+
+Seeded from the user's supplied profile: quant finance and markets, AI/ML and big
+tech, physics and space science, startups, geopolitics, plus personal niches.
+The original "use memory and read all my chats" was not possible (no accessible
+chat history), so the profile is seeded directly and refined by the tick/cross
+learning loop.
+
+## Known limitations
+
+- Map tiles and fonts need network on the browser side; story data is bundled.
+- Live AI refresh can surface current-sounding but unverified specifics; a real
+  news API is the recommended path for hard sourcing.
+- Personalization is single-user and local (localStorage), not multi-device.

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OMNISCIENCE // INTEL</title>
+  <meta name="description" content="Omniscience Intel - a personalized tactical world-news intelligence map with live tracking." />
+  <meta name="theme-color" content="#05080d" />
+  <meta property="og:title" content="Omniscience Intel" />
+  <meta property="og:description" content="Personalized tactical world-news intelligence map." />
+  <link rel="icon" href="icon.svg" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Saira+Condensed:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="boot" class="boot">
+    <div class="boot-inner">
+      <div class="boot-title">OMNISCIENCE // INTEL</div>
+      <div class="boot-line" id="bootLine">ESTABLISHING UPLINK...</div>
+      <div class="boot-bar"><span></span></div>
+    </div>
+  </div>
+
+  <header id="topbar" class="topbar">
+    <button id="railToggle" class="rail-toggle" title="Toggle feed panel" aria-label="Toggle feed panel">&#9776;</button>
+    <div class="brand">
+      <span class="brand-mark">&#9678;</span>
+      <span class="brand-name">OMNISCIENCE</span><span class="brand-sub">// INTEL</span>
+    </div>
+    <div class="status-cluster">
+      <div class="stat"><label>UTC</label><span id="clock">--:--:--</span></div>
+      <div class="stat"><label>CONTACTS</label><span id="countTotal">0</span></div>
+      <div class="stat"><label>SYNC</label><span id="lastRefresh">--</span></div>
+      <div class="stat live"><span class="dot"></span><span id="liveLabel">LIVE</span></div>
+      <button id="refreshBtn" class="btn-refresh" title="Pull latest intel">&#8635; REFRESH</button>
+    </div>
+  </header>
+
+  <aside id="rail" class="rail">
+    <div class="rail-section">
+      <div class="rail-head">SIGNAL FEED</div>
+      <input id="feedSearch" class="feed-search" type="text" placeholder="// filter signal..." autocomplete="off" />
+      <div class="sort-row">
+        <span class="srt-label">SORT</span>
+        <button class="srt on" data-sort="relevance">REL</button>
+        <button class="srt" data-sort="recent">NEW</button>
+        <button class="srt" data-sort="priority">PRI</button>
+      </div>
+      <div class="sort-row">
+        <span class="srt-label">WINDOW</span>
+        <button class="win on" data-age="0">ALL</button>
+        <button class="win" data-age="7">7D</button>
+        <button class="win" data-age="3">72H</button>
+        <button class="win" data-age="1">24H</button>
+      </div>
+      <div id="feed" class="feed"></div>
+    </div>
+    <div class="rail-section filters">
+      <div class="rail-head">SECTORS</div>
+      <div id="filters" class="chips"></div>
+      <div class="jump-row">
+        <span class="srt-label">JUMP</span>
+        <select id="regionJump" class="jump-sel" aria-label="Jump to region">
+          <option value="world">WORLD</option>
+          <option value="americas">AMERICAS</option>
+          <option value="europe">EUROPE</option>
+          <option value="meast">MIDDLE EAST</option>
+          <option value="asia">ASIA</option>
+          <option value="africa">AFRICA</option>
+        </select>
+      </div>
+    </div>
+    <div class="rail-section analytics">
+      <div class="rail-head">SIGNAL BREAKDOWN</div>
+      <div id="breakdown" class="breakdown"></div>
+    </div>
+    <div class="rail-section blocked">
+      <div class="rail-head">SUPPRESSED TOPICS <span id="blockedCount" class="muted">0</span></div>
+      <div id="blockedList" class="blocked-list"></div>
+    </div>
+    <div class="rail-foot">
+      <span id="profileSummary" class="muted"></span>
+    </div>
+  </aside>
+
+  <main id="mapwrap" class="mapwrap">
+    <div id="map"></div>
+    <div class="map-overlay grid"></div>
+    <div class="map-overlay sweep" id="mapSweep"></div>
+    <div class="map-overlay scan"></div>
+    <div class="map-overlay vignette"></div>
+    <div class="map-corner tl"></div><div class="map-corner tr"></div>
+    <div class="map-corner bl"></div><div class="map-corner br"></div>
+    <div id="mapControls" class="map-controls">
+      <button id="tracksBtn" class="mc-btn" title="Live aircraft + tanker overlay" aria-pressed="false">&#9650; TRACKS</button>
+      <button id="intelBtn" class="mc-btn" title="Show only stories you flagged" aria-pressed="false">&#10003; INTEL</button>
+      <button id="soundBtn" class="mc-btn on" title="Toggle sound" aria-pressed="true">&#9834; SOUND</button>
+      <button id="helpBtn" class="mc-btn" title="Operations manual + systems">? MANUAL</button>
+    </div>
+    <div id="mapBadge" class="map-badge">GLOBAL THEATER &middot; <span id="badgeCount">0</span> CONTACTS</div>
+    <div id="legend" class="legend"></div>
+  </main>
+
+  <section id="dossier" class="dossier" role="dialog" aria-modal="true" aria-label="Story dossier" aria-hidden="true">
+    <button id="dossierClose" class="dossier-close" title="Close">&times;</button>
+    <div class="dossier-head">
+      <div class="dossier-class">// CLASSIFIED INTEL DOSSIER</div>
+      <div id="dCat" class="dossier-cat">CATEGORY</div>
+      <h2 id="dTitle" class="dossier-title">--</h2>
+      <div class="dossier-meta">
+        <span id="dLoc">--</span>
+        <span id="dCoords" class="muted">--</span>
+      </div>
+      <div class="dossier-meta">
+        <a id="dSource" class="dossier-src" target="_blank" rel="noopener">--</a>
+        <span id="dDate" class="muted">--</span>
+        <span id="dPriority" class="prio">--</span>
+      </div>
+    </div>
+    <div class="dossier-body">
+      <p id="dSummary" class="dossier-summary">--</p>
+      <div id="dDetail" class="dossier-detail" hidden>
+        <div class="detail-head">// EXPANDED INTEL</div>
+        <p id="dDetailText"></p>
+      </div>
+      <div id="dTags" class="dossier-tags"></div>
+      <div id="dRelated" class="dossier-related"></div>
+    </div>
+    <div class="dossier-actions">
+      <div class="actions-label">ASSESSMENT</div>
+      <div class="tristate" id="tristate">
+        <button class="tri tri-none" data-state="none">NONE</button>
+        <button class="tri tri-up" data-state="interested">&#10003; MORE INTEL</button>
+        <button class="tri tri-down" data-state="blocked">&#10007; SUPPRESS</button>
+      </div>
+      <div id="actionHint" class="action-hint muted">MORE INTEL expands detail and boosts this topic. SUPPRESS hides it and blocks the topic.</div>
+      <button id="dCopyLink" class="copy-link" title="Copy a shareable link to this story">&#9112; COPY LINK</button>
+    </div>
+  </section>
+
+  <section id="countryPanel" class="country-panel" role="dialog" aria-modal="true" aria-label="Country intel brief" aria-hidden="true">
+    <button id="cpClose" class="dossier-close" title="Close">&times;</button>
+    <div class="cp-head">
+      <div class="dossier-class">// COUNTRY INTEL BRIEF</div>
+      <h2 id="cpName" class="dossier-title">--</h2>
+      <div id="cpCount" class="muted">0 LOCAL</div>
+    </div>
+    <div id="cpList" class="cp-list"></div>
+  </section>
+
+  <div id="helpOverlay" class="help-overlay" role="dialog" aria-modal="true" aria-label="Operations manual" aria-hidden="true">
+    <div class="help-card">
+      <button id="helpClose" class="dossier-close" title="Close">&times;</button>
+      <div class="dossier-class">// OPERATIONS MANUAL</div>
+      <h2 class="dossier-title">OMNISCIENCE // INTEL</h2>
+      <div class="help-grid">
+        <div><span class="k">click marker / feed</span> open dossier</div>
+        <div><span class="k">j / k or arrows</span> step through feed</div>
+        <div><span class="k">MORE INTEL</span> expand + boost topic</div>
+        <div><span class="k">SUPPRESS</span> hide + block topic</div>
+        <div><span class="k">click a country</span> country intel brief</div>
+        <div><span class="k">TRACKS</span> live aircraft + tankers</div>
+        <div><span class="k">LINKS</span> topic connection lines</div>
+        <div><span class="k">INTEL ONLY</span> show flagged only</div>
+        <div><span class="k">SORT</span> relevance / new / priority</div>
+        <div><span class="k">CRITICAL</span> critical-only filter</div>
+        <div><span class="k">search box</span> filter the feed</div>
+        <div><span class="k">Esc</span> close panels</div>
+      </div>
+      <div class="help-systems">
+        <div class="dossier-class">// SYSTEMS</div>
+        <div class="sys-btns">
+          <button id="fxBtn" class="btn-reset on" title="Visual effects (scanlines, glow, motion)" aria-pressed="true">FX</button>
+          <button id="linksBtn" class="btn-reset" title="Topic connection lines" aria-pressed="false">LINKS</button>
+          <button id="exportBtn" class="btn-reset" title="Download your profile as JSON">EXPORT</button>
+          <button id="importBtn" class="btn-reset" title="Load a profile JSON">IMPORT</button>
+          <button id="resetBtn" class="btn-reset" title="Clear personalization and restore baseline">RESET</button>
+        </div>
+        <input id="importFile" type="file" accept="application/json" style="display:none" />
+      </div>
+      <div class="help-foot muted">Personalization is stored locally in your browser; use EXPORT / IMPORT to move it. Set ANTHROPIC_API_KEY in Vercel for live news + country briefs.</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-hidden="true"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
