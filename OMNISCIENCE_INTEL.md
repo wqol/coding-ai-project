@@ -67,8 +67,12 @@ keyed feed (wire one in `api/tracks.js`, e.g. `AISSTREAM_API_KEY`) to go live.
 - Interactive countries: clicking a country opens a brief panel listing its
   local stories (point-in-polygon) and pulls fresh country news when a key is set.
 - Map controls: LINKS (topic connection lines), TRACKS (aircraft + tanker
-  overlay), INTEL ONLY (show only flagged stories). Plus a marker legend,
+  overlay), INTEL ONLY (show only flagged stories), a lat/long graticule, a
+  day/night terminator, and low-zoom marker clustering. Plus a marker legend,
   per-item relevance bars, keyboard nav (j/k or arrows), and a persisted map view.
+- Feed controls: sort (relevance / new / priority), a recency window
+  (24h/72h/7d/all), a critical-only filter, search, a per-category SIGNAL
+  BREAKDOWN, region quick-jump, dossier COPY LINK, and a mobile feed drawer.
 - Auto-refresh on load when the feed is stale (>30 min) and a live source has
   worked before.
 - Operations manual overlay (`?` key or MANUAL button), an FX toggle that also

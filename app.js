@@ -21,6 +21,7 @@
     interestedOnly: false,
     sort: "relevance",
     critOnly: false,
+    maxAgeDays: 0,
     fx: loadJSON("omni_fx_v1", !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)),
     showLinks: false,
     showTracks: false,
@@ -94,6 +95,7 @@
     if (isBlocked(s) || !state.filters.has(s.category) || !searchMatch(s)) return false;
     if (state.interestedOnly && reactionOf(s) !== "interested") return false;
     if (state.critOnly && s.priority !== "critical") return false;
+    if (state.maxAgeDays > 0 && ageDays(s.published_date) > state.maxAgeDays) return false;
     return true;
   }
   function ranked() {
@@ -536,6 +538,7 @@
   function hhmm(d) { return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()); }
   function timeAgo(ds) { if (!ds) return ""; var d = new Date(ds + "T00:00:00Z"); if (isNaN(d.getTime())) return ds; var days = Math.round((Date.now() - d.getTime()) / 86400000); if (days <= 0) return "today"; if (days === 1) return "1d ago"; if (days < 30) return days + "d ago"; if (days < 365) return Math.round(days / 30) + "mo ago"; return ds; }
   function srcUrl(s) { return s.url || s.source_url || ("https://news.google.com/search?q=" + encodeURIComponent(s.title)); }
+  function ageDays(ds) { if (!ds) return 1e9; var d = new Date(ds + "T00:00:00Z"); return isNaN(d.getTime()) ? 1e9 : (Date.now() - d.getTime()) / 86400000; }
   function clockTick() { var d = new Date(); setText("clock", pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds())); }
   var toastTimer = null;
   function toast(msg, kind) { var t = document.getElementById("toast"); t.className = "toast show" + (kind ? " " + kind : ""); t.textContent = msg; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = "toast"; }, 3200); }
@@ -561,6 +564,7 @@
     var rj = document.getElementById("regionJump"); if (rj) rj.onchange = function () { var b = REGIONS[rj.value]; if (b && map) { try { map.fitBounds(b); } catch (e) {} } };
     var cl = document.getElementById("dCopyLink"); if (cl) cl.onclick = function () { try { if (navigator.clipboard) navigator.clipboard.writeText(location.href); toast("LINK COPIED"); } catch (e) { toast("COPY FAILED", "bad"); } };
     document.querySelectorAll(".srt").forEach(function (b) { b.onclick = function () { state.sort = b.getAttribute("data-sort"); document.querySelectorAll(".srt").forEach(function (x) { x.classList.toggle("on", x === b); }); renderAll(); }; });
+    document.querySelectorAll(".win").forEach(function (b) { b.onclick = function () { state.maxAgeDays = Number(b.getAttribute("data-age")) || 0; document.querySelectorAll(".win").forEach(function (x) { x.classList.toggle("on", x === b); }); renderAll(); }; });
     document.querySelectorAll("#tristate .tri").forEach(function (b) { b.onclick = function () { setReaction(b.getAttribute("data-state")); }; });
     document.addEventListener("keydown", function (e) {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;

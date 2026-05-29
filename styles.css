@@ -208,6 +208,9 @@ button{font-family:inherit; cursor:pointer}
 .srt{background:rgba(255,255,255,.02); border:1px solid var(--line); color:var(--muted); font-size:10px; letter-spacing:.08em; padding:4px 8px; border-radius:2px}
 .srt:hover{color:#cde; border-color:var(--line-strong)}
 .srt.on{color:#04121a; background:var(--cyan); border-color:var(--cyan)}
+.win{background:rgba(255,255,255,.02); border:1px solid var(--line); color:var(--muted); font-size:10px; letter-spacing:.08em; padding:4px 8px; border-radius:2px}
+.win:hover{color:#cde; border-color:var(--line-strong)}
+.win.on{color:#04121a; background:var(--cyan); border-color:var(--cyan)}
 .chip.crit{border-color:rgba(255,91,91,.5); color:var(--red)}
 .chip.crit.on{background:var(--red); color:#1a0606; border-color:var(--red); box-shadow:0 0 8px rgba(255,91,91,.4)}
 .feed-age{color:var(--muted)}
