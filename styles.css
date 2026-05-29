@@ -15,6 +15,8 @@ body{
 h2{margin:0}
 .muted{color:var(--muted)}
 button{font-family:inherit; cursor:pointer}
+:focus-visible{outline:1px solid var(--cyan); outline-offset:2px}
+.dossier:focus,.country-panel:focus{outline:none}
 
 /* boot */
 .boot{position:fixed; inset:0; z-index:3000; background:radial-gradient(circle at 50% 40%,#0a131d,#03060a);

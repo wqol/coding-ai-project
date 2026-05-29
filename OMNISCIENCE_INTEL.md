@@ -73,7 +73,9 @@ keyed feed (wire one in `api/tracks.js`, e.g. `AISSTREAM_API_KEY`) to go live.
   worked before.
 - Operations manual overlay (`?` key or MANUAL button), an FX toggle that also
   honours `prefers-reduced-motion`, profile EXPORT / IMPORT as JSON, shareable
-  permalinks (`#s=<id>`), and an installable PWA (manifest + icon).
+  permalinks (`#s=<id>`), and an installable PWA (manifest + icon). Offline-capable
+  via a network-first service worker; dialog roles, focus management, and
+  focus-visible outlines for keyboard and screen-reader use.
 - State persists in `localStorage` (profile, per-story reactions, live cache,
   last view, last refresh, FX preference).
 
@@ -83,7 +85,7 @@ keyed feed (wire one in `api/tracks.js`, e.g. `AISSTREAM_API_KEY`) to go live.
 - `data.js` - bundled stories + seed interest profile
 - `api/news.js` - optional live news endpoint (country-aware; safe fallback)
 - `api/tracks.js` - aircraft (OpenSky) + sample tanker endpoint
-- `manifest.json`, `icon.svg` - PWA manifest and app icon
+- `manifest.json`, `icon.svg`, `sw.js` - PWA manifest, app icon, service worker
 
 ## Data model (per story)
 

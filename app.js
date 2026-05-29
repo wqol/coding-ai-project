@@ -247,6 +247,7 @@
     live.textContent = "// scanning open sources for " + cname + "...";
     list.appendChild(live);
     var p = document.getElementById("countryPanel"); p.classList.add("open"); p.setAttribute("aria-hidden", "false");
+    try { p.setAttribute("tabindex", "-1"); p.focus({ preventScroll: true }); } catch (e) {}
     fetchCountryNews(cname);
   }
   function countryCard(s) {
@@ -416,6 +417,7 @@
     s.tags.forEach(function (t) { var e = document.createElement("span"); e.className = "tag"; e.textContent = t; tags.appendChild(e); });
     setTristate(rxn); renderRelated(s);
     d.classList.add("open"); d.setAttribute("aria-hidden", "false");
+    try { d.setAttribute("tabindex", "-1"); d.focus({ preventScroll: true }); } catch (e) {}
   }
   function renderRelated(s) {
     var box = document.getElementById("dRelated"); if (!box) return;
@@ -457,6 +459,7 @@
     var o = document.getElementById("helpOverlay"); if (!o) return;
     var open = force === undefined ? !o.classList.contains("open") : force;
     o.classList.toggle("open", open); o.setAttribute("aria-hidden", open ? "false" : "true");
+    if (open) { var hc = document.getElementById("helpClose"); try { if (hc) hc.focus({ preventScroll: true }); } catch (e) {} }
   }
   function exportProfile() {
     try {
@@ -559,6 +562,7 @@
     initMap(); wire(); renderLegend(); applyFx(); clockTick(); setInterval(clockTick, 1000); stamp(); renderAll(); boot();
     var hm = (location.hash.match(/s=([\w-]+)/) || [])[1]; if (hm && byId(hm)) selectStory(hm);
     if (meta.liveOk && state.lastRefresh && (Date.now() - state.lastRefresh.getTime() > STALE_MS)) refresh(true);
+    if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js").catch(function () {}); } catch (e) {} }
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 
