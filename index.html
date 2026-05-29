@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Surfer</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a1418;overflow:hidden;}
+  #c{display:block;width:100%;height:100%;}
+  #hud{position:fixed;left:16px;bottom:14px;font:600 12px/1.3 -apple-system,Segoe UI,Roboto,sans-serif;
+       color:#fff;opacity:.5;letter-spacing:.05em;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none;}
+  #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;color:#ffd9b0;
+       font:500 15px/1.5 -apple-system,sans-serif;text-align:center;padding:30px;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">A/D steer &middot; W faster / S slower &middot; drag to look around &middot; scroll zoom</div>
+<div id="ui" style="position:fixed;right:16px;bottom:14px;font:600 12px -apple-system,sans-serif;color:#fff;opacity:.85;text-shadow:0 1px 3px #0008;display:flex;align-items:center;gap:8px;">
+  <span>waves</span>
+  <input id="amp" type="range" min="0.3" max="3.0" step="0.1" value="1.5" style="width:130px;">
+</div>
+<div id="err">Couldn't load the 3D engine. Open this file in a normal browser tab with internet access.</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+try {
+
+/* ===== wave field (shared CPU / GPU) ===== */
+const G = 9.81;
+let AMP = 1.5;   // wave-size multiplier (slider-controlled)
+const WIND = new THREE.Vector2(0.55, 0.83).normalize();   // wind direction (xz)
+const baseWaves = [
+  {L:74, A:1.15, Q:0.30, sp: 0.00},
+  {L:55, A:0.85, Q:0.36, sp: 0.30},
+  {L:38, A:0.72, Q:0.42, sp:-0.35},
+  {L:27, A:0.46, Q:0.46, sp: 0.55},
+  {L:19, A:0.30, Q:0.50, sp:-0.55},
+  {L:13, A:0.20, Q:0.54, sp: 0.85},
+  {L: 9, A:0.13, Q:0.58, sp:-0.85},
+  {L: 6, A:0.08, Q:0.60, sp: 1.20},
+  {L: 4, A:0.05, Q:0.62, sp:-1.20},
+];
+const WAVES = baseWaves.map((w,i)=>{
+  const ang = w.sp + (i*0.5);              // spread around wind dir
+  const dx = WIND.x*Math.cos(ang) - WIND.y*Math.sin(ang);
+  const dz = WIND.x*Math.sin(ang) + WIND.y*Math.cos(ang);
+  const k = 2*Math.PI/w.L;
+  return {dx,dz,k,A:w.A,Q:w.Q,c:Math.sqrt(G/k),ph:i*1.7};
+});
+const NW = WAVES.length;
+
+function crestFoam(x,z,t){let steep=0;for(const w of WAVES){const f=w.k*(w.dx*x+w.dz*z-w.c*t)+w.ph;steep+=w.Q*w.k*(w.A*AMP)*Math.sin(f);}return steep*1.25-0.42;}
+function sampleSurface(x,z,t){
+  let py=0,nx=0,ny=0,nz=0;
+  for(const w of WAVES){
+    const f=w.k*(w.dx*x+w.dz*z - w.c*t)+w.ph;
+    const A=w.A*AMP, C=Math.cos(f),S=Math.sin(f),WA=w.k*A;
+    py+=A*S; nx+=w.dx*WA*C; nz+=w.dz*WA*C; ny+=w.Q*WA*S;
+  }
+  let Nx=-nx,Ny=1-ny,Nz=-nz; const inv=1/Math.hypot(Nx,Ny,Nz);
+  return {y:py,nx:Nx*inv,ny:Ny*inv,nz:Nz*inv};
+}
+
+/* ===== renderer / scene / camera ===== */
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.12;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+const scene=new THREE.Scene();
+const HORIZON=new THREE.Color('#ffbe85');
+scene.fog=new THREE.FogExp2(HORIZON,0.0038);   // lighter -> crisper
+
+const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,0.1,2200);
+camera.position.set(0,3,9);
+
+/* ===== light ===== */
+const sunDir=new THREE.Vector3(0.42,0.30,0.86).normalize();   // low sun, mostly toward camera -> backlit waves
+const sun=new THREE.DirectionalLight(0xffe2b0,2.8);
+sun.position.copy(sunDir).multiplyScalar(60); scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xfff0d8,0x0c4a5c,1.0));
+scene.add(new THREE.AmbientLight(0x4a7884,0.3));
+
+/* ===== shared sky GLSL (used by dome AND water reflection) ===== */
+const SKY_GLSL=`
+  uniform vec3 uSun; uniform float uTime;
+  float h21(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.3);return fract(p.x*p.y);}
+  float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+    return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
+  float fbm(vec2 p){float a=0.5,s=0.0;for(int i=0;i<5;i++){s+=a*vnoise(p);p*=2.03;a*=0.5;}return s;}
+  vec3 skyColor(vec3 dir){
+    float hh=clamp(dir.y*0.5+0.5,0.0,1.0);
+    vec3 top=vec3(0.12,0.40,0.74), mid=vec3(0.99,0.72,0.44), hor=vec3(1.0,0.80,0.55);
+    vec3 col=mix(hor,mid,smoothstep(0.46,0.64,hh));
+    col=mix(col,top,smoothstep(0.62,0.97,hh));
+    float d=max(dot(normalize(dir),normalize(uSun)),0.0);
+    col+=vec3(1.0,0.72,0.42)*pow(d,7.0)*1.0;
+    col+=vec3(1.0,0.9,0.7)*pow(d,260.0)*4.0;          // sun core
+    // fbm clouds on upper hemisphere, drifting
+    if(dir.y>0.02){
+      vec2 uv=dir.xz/(dir.y+0.18)*0.6;
+      float c=fbm(uv*1.3+uTime*0.012);
+      c=smoothstep(0.55,0.95,c)*smoothstep(0.0,0.25,dir.y);
+      vec3 cl=mix(vec3(1.0,0.86,0.7),vec3(1.0,0.97,0.92),c);
+      col=mix(col,cl,c*0.65);
+    }
+    return col;
+  }`;
+
+const sky=new THREE.Mesh(new THREE.SphereGeometry(1200,48,24),
+  new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
+    uniforms:{uSun:{value:sunDir},uTime:{value:0}},
+    vertexShader:`varying vec3 vD;void main(){vD=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:SKY_GLSL+`varying vec3 vD;void main(){gl_FragColor=vec4(skyColor(vD),1.0);}`}));
+scene.add(sky);
+
+const sunDisc=new THREE.Mesh(new THREE.CircleGeometry(34,64),
+  new THREE.MeshBasicMaterial({color:new THREE.Color(3.0,2.3,1.5),toneMapped:false,fog:false}));
+sunDisc.position.copy(sunDir).multiplyScalar(760); sunDisc.lookAt(0,0,0); scene.add(sunDisc);
+// soft additive glow discs around the sun (fake bloom, no postprocessing)
+function glowTex(){const sz=128,cv=document.createElement('canvas');cv.width=cv.height=sz;const x=cv.getContext('2d');
+  const g=x.createRadialGradient(sz/2,sz/2,0,sz/2,sz/2,sz/2);
+  g.addColorStop(0,'rgba(255,240,210,0.9)');g.addColorStop(0.25,'rgba(255,210,150,0.45)');
+  g.addColorStop(1,'rgba(255,180,120,0)');x.fillStyle=g;x.fillRect(0,0,sz,sz);
+  const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;return t;}
+const _gt=glowTex();
+[260,150,90].forEach((r,i)=>{const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:_gt,
+  blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,fog:false,
+  opacity:[0.6,0.8,1.0][i],toneMapped:false}));
+  sp.position.copy(sunDir).multiplyScalar(740); sp.scale.setScalar(r); scene.add(sp);});
+
+/* ===== ocean ===== */
+const oceanGeo=new THREE.PlaneGeometry(900,900,300,300); oceanGeo.rotateX(-Math.PI/2);
+const uDir=WAVES.map(w=>new THREE.Vector4(w.dx,w.dz,w.k,w.A));
+const uAux=WAVES.map(w=>new THREE.Vector2(w.c,w.Q));
+const uPh =WAVES.map(w=>w.ph);
+
+const oceanMat=new THREE.ShaderMaterial({fog:true,
+  uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib['fog'],{
+    uTime:{value:0},uSun:{value:sunDir},uCam:{value:new THREE.Vector3()},
+    uWind:{value:WIND},uAmp:{value:AMP},
+    uBoardPos:{value:new THREE.Vector3(0,0,2.7)},uBoardDir:{value:new THREE.Vector2(1,0)},uBoardOn:{value:1.0},
+    uDir:{value:uDir},uAux:{value:uAux},uPh:{value:uPh},
+  }]),
+  vertexShader:`#define N ${NW}
+    uniform float uTime,uAmp,uBoardOn; uniform vec4 uDir[N]; uniform vec2 uAux[N]; uniform float uPh[N];
+    uniform vec3 uBoardPos; uniform vec2 uBoardDir;
+    varying vec3 vWorld; varying vec3 vNormal; varying float vFoam; varying float vCrest; varying float vWake;
+    #include <fog_pars_vertex>
+    void main(){
+      vec3 p=position; vec3 nrm=vec3(0.0); float steep=0.0;
+      for(int i=0;i<N;i++){
+        float dx=uDir[i].x,dz=uDir[i].y,k=uDir[i].z,A=uDir[i].w*uAmp,c=uAux[i].x,Q=uAux[i].y;
+        float f=k*(dx*position.x+dz*position.z-c*uTime)+uPh[i];
+        float C=cos(f),S=sin(f),WA=k*A;
+        p.x+=Q*A*dx*C; p.z+=Q*A*dz*C; p.y+=A*S;
+        nrm.x+=dx*WA*C; nrm.z+=dz*WA*C; nrm.y+=Q*WA*S; steep+=Q*WA*S;
+      }
+      // ----- board <-> water coupling: displace surface where the board planes -----
+      vWake=0.0;
+      {
+        vec2 rel=position.xz-uBoardPos.xz;
+        vec2 dir=normalize(uBoardDir); vec2 perp=vec2(-dir.y,dir.x);
+        float side=dot(rel,perp);
+        float aL=1.2, aW=0.34;
+        float u=dot(rel,dir)/aL, v=dot(rel,perp)/aW;
+        float E=exp(-(u*u+v*v));
+        float depth=0.02*uBoardOn;
+        p.y -= depth*E;                                  // trough under the planing hull
+        float lip=0.12*uBoardOn*exp(-(pow((u-1.1),2.0)+v*v)); // bow wave ahead of nose
+        p.y += lip;
+        // analytic slope of the dent -> feeds the surface normal so light reacts
+        float dEdx=E*(-2.0*(u*dir.x/aL + v*perp.x/aW));
+        float dEdz=E*(-2.0*(u*dir.y/aL + v*perp.y/aW));
+        nrm.x += depth*dEdx; nrm.z += depth*dEdz;
+        // CRISP board-shaped wake: narrow trailing streak + two rail lines (no round glow)
+        float tail=smoothstep(0.0,0.05,-u)*smoothstep(2.6,0.0,-dot(rel,dir))*smoothstep(0.5,0.0,abs(side));
+        float rail=smoothstep(0.1,0.0,abs(abs(side)-0.27))*smoothstep(1.2,-0.7,dot(rel,dir))*step(-1.5,dot(rel,dir));
+        vWake=clamp(tail*0.9+rail*0.85,0.0,1.0)*uBoardOn;
+      }
+      vNormal=normalize(vec3(-nrm.x,1.0-nrm.y,-nrm.z));
+      vec4 wp=modelMatrix*vec4(p,1.0); vWorld=wp.xyz;
+      vFoam=clamp(steep*1.25-0.42,0.0,1.0);
+      vCrest=clamp(p.y*0.5+0.1,0.0,1.0);
+      vec4 mvPosition=viewMatrix*wp; gl_Position=projectionMatrix*mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader:SKY_GLSL+`
+    uniform vec3 uCam; uniform vec2 uWind;
+    varying vec3 vWorld; varying vec3 vNormal; varying float vFoam; varying float vCrest; varying float vWake;
+    #include <fog_pars_fragment>
+    void main(){
+      vec3 Ng=normalize(vNormal);
+      // micro detail normal (wind chop) -> glitter
+      vec2 wp=vWorld.xz;
+      float e=0.35;
+      float n0=fbm(wp*1.7+uTime*0.5*uWind);
+      float nx=fbm((wp+vec2(e,0))*1.7+uTime*0.5*uWind)-n0;
+      float nz=fbm((wp+vec2(0,e))*1.7+uTime*0.5*uWind)-n0;
+      vec3 N=normalize(Ng+vec3(-nx,0.0,-nz)*0.55);
+      vec3 V=normalize(uCam-vWorld);
+      vec3 L=normalize(uSun);
+      float facing=clamp(dot(N,V),0.0,1.0);
+
+      // base water colour, depth darkened
+      vec3 deep=vec3(0.018,0.12,0.17), shallow=vec3(0.07,0.42,0.50);
+      vec3 base=mix(deep,shallow, clamp(vCrest*0.8+0.18,0.0,1.0));
+
+      // fresnel sky reflection (samples real sky -> reflects sun)
+      float fres=clamp(pow(1.0-facing,5.0)+0.02,0.0,1.0);
+      vec3 R=reflect(-V,N);
+      vec3 refl=skyColor(R);
+      vec3 col=mix(base,refl,fres);
+
+      // subsurface backlight: thin backlit crests glow teal-green
+      float back=pow(max(dot(V,-L),0.0),3.0);
+      float sss=back*smoothstep(0.0,1.3,vCrest)*1.6;
+      col+=vec3(0.10,0.55,0.45)*sss;
+
+      // diffuse warmth
+      col+=vec3(0.14,0.10,0.06)*max(dot(Ng,L),0.0);
+
+      // sharp specular sun glitter (micro-normal driven)
+      vec3 H=normalize(L+V);
+      float sp=pow(max(dot(N,H),0.0),900.0);
+      col+=vec3(1.0,0.9,0.7)*sp*3.0;
+      float sp2=pow(max(dot(N,H),0.0),120.0);
+      col+=vec3(1.0,0.85,0.6)*sp2*0.4;
+
+      // foam: crest break-up + flow
+      float fn=fbm(wp*0.8 - uTime*0.3*uWind);
+      float foam=smoothstep(0.45,0.9,vFoam)*(0.5+0.3*fn);
+      foam+=smoothstep(0.7,0.85,vFoam*fn)*0.6;
+      col=mix(col,vec3(0.97,1.0,1.0),clamp(foam,0.0,1.0));
+      float wk=vWake*(0.35+0.75*fbm(vWorld.xz*1.6 - uTime*0.5*uWind));
+      wk=smoothstep(0.12,0.55,wk);
+      col=mix(col,vec3(0.98,1.0,1.0),clamp(wk,0.0,1.0)*0.85);
+
+      gl_FragColor=vec4(col,1.0);
+      #include <fog_fragment>
+    }`});
+const ocean=new THREE.Mesh(oceanGeo,oceanMat); scene.add(ocean);
+
+/* ===== surfer ===== */
+function buildSurfer(){
+  const g=new THREE.Group();
+  const skin=new THREE.MeshStandardMaterial({color:0xc78a56,roughness:0.7});
+  const suit=new THREE.MeshStandardMaterial({color:0x0c1a24,roughness:0.35,metalness:0.08});
+  const accent=new THREE.MeshStandardMaterial({color:0x18b6d6,roughness:0.3});
+  const hair=new THREE.MeshStandardMaterial({color:0x201810,roughness:0.95});
+
+  // ---- board (nose +X), thin & rockered ----
+  const board=new THREE.Group();
+  const bGeo=new THREE.CapsuleGeometry(0.27,2.0,6,20); bGeo.rotateZ(Math.PI/2); bGeo.scale(1,0.10,0.92);
+  board.add(new THREE.Mesh(bGeo,new THREE.MeshStandardMaterial({color:0xffba34,roughness:0.28,metalness:0.12})));
+  const stripe=new THREE.Mesh(new THREE.BoxGeometry(2.8,0.012,0.04),new THREE.MeshStandardMaterial({color:0xe23a1a}));
+  stripe.position.y=0.06; board.add(stripe);
+  const fin=new THREE.Mesh(new THREE.ConeGeometry(0.09,0.34,4),new THREE.MeshStandardMaterial({color:0x121216}));
+  fin.rotation.x=Math.PI; fin.position.set(-1.25,-0.16,0); board.add(fin);
+  g.add(board);
+
+  // ---- body, low compact crouch, facing +X ----
+  const body=new THREE.Group(); body.position.y=0.045; g.add(body);
+
+  // pelvis hub everything hangs off
+  const pelvis=new THREE.Mesh(new THREE.SphereGeometry(0.15,14,14),suit);
+  pelvis.position.set(0.05,0.5,0); pelvis.scale.set(1.1,0.8,1.0); body.add(pelvis);
+
+  // legs: thigh from pelvis down-out to knee, shin to foot on deck
+  function leg(footX,front){
+    const hipX=0.05+(front?0.06:-0.06), hipZ=front?0.12:-0.12;
+    const kneeX=footX+(front?0.07:-0.07), kneeY=0.22;
+    const th=new THREE.Mesh(new THREE.CapsuleGeometry(0.1,Math.hypot(hipX-kneeX,0.5-kneeY)-0.06,5,10),suit);
+    th.position.set((hipX+kneeX)/2,(0.5+kneeY)/2,hipZ*0.6);
+    th.lookAt(kneeX,kneeY,0); th.rotateX(Math.PI/2); body.add(th);
+    const knee=new THREE.Mesh(new THREE.SphereGeometry(0.075,10,10),suit); knee.position.set(kneeX,kneeY,hipZ*0.5); body.add(knee);
+    const sh=new THREE.Mesh(new THREE.CapsuleGeometry(0.082,Math.hypot(kneeX-footX,kneeY-0.05)-0.05,5,10),suit);
+    sh.position.set((kneeX+footX)/2,(kneeY+0.05)/2,hipZ*0.3);
+    sh.lookAt(footX,0.05,0); sh.rotateX(Math.PI/2); body.add(sh);
+    const foot=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.05,0.14),suit); foot.position.set(footX,0.02,0); body.add(foot);
+  }
+  leg(0.52,true); leg(-0.42,false);
+
+  // spine: pelvis -> chest, leaned forward over front foot
+  const chestPos=new THREE.Vector3(0.34,0.86,0);
+  const spine=new THREE.Mesh(new THREE.CapsuleGeometry(0.13,0.36,6,12),suit);
+  spine.position.set((0.05+chestPos.x)/2,(0.5+chestPos.y)/2,0);
+  spine.lookAt(chestPos.x,chestPos.y,0); spine.rotateX(Math.PI/2); body.add(spine);
+  const chest=new THREE.Mesh(new THREE.SphereGeometry(0.155,14,14),accent);
+  chest.position.copy(chestPos); chest.scale.set(1.0,1.1,0.9); body.add(chest);
+
+  // shoulders at chest height
+  const shF=new THREE.Vector3(0.42,0.84,0.16), shB=new THREE.Vector3(0.28,0.9,-0.16);
+  [shF,shB].forEach(p=>{const sh=new THREE.Mesh(new THREE.SphereGeometry(0.075,10,10),suit);sh.position.copy(p);body.add(sh);});
+
+  // arms: shoulder->hand single capsule + hand sphere, connected
+  function arm(sh,hand){
+    const len=sh.distanceTo(hand);
+    const a=new THREE.Mesh(new THREE.CapsuleGeometry(0.046,len-0.08,5,10),suit);
+    a.position.copy(sh).add(hand).multiplyScalar(0.5);
+    a.lookAt(hand.x,hand.y,hand.z); a.rotateX(Math.PI/2); body.add(a);
+    const h=new THREE.Mesh(new THREE.SphereGeometry(0.05,10,10),skin); h.position.copy(hand); body.add(h);
+  }
+  arm(shF,new THREE.Vector3(0.72,0.5,0.34));   // front reaches down the line
+  arm(shB,new THREE.Vector3(0.06,0.74,-0.52));  // back trails for balance
+
+  // neck + head looking down the line
+  const neck=new THREE.Mesh(new THREE.CapsuleGeometry(0.05,0.06,4,8),skin); neck.position.set(0.42,0.94,0.02); body.add(neck);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.13,18,18),skin); head.position.set(0.5,1.02,0.02); body.add(head);
+  const cap=new THREE.Mesh(new THREE.SphereGeometry(0.14,18,18,0,6.28,0,1.7),hair); cap.position.set(0.49,1.05,0.02); body.add(cap);
+
+  g.userData.body=body; g.userData.bodyBaseY=0.045;
+  g.scale.setScalar(1.05); return g;
+}
+const surfer=buildSurfer(); scene.add(surfer);
+const SURF_LIFT=0.0;
+
+/* ===== particles: spray + carve wake ===== */
+const P=1600;
+const pPos=new Float32Array(P*3),pVel=new Float32Array(P*3),pLife=new Float32Array(P),pSize=new Float32Array(P),pKind=new Float32Array(P);
+for(let i=0;i<P;i++)pPos[i*3+1]=-999;
+let pHead=0;
+function sprayTex(){const s=64,cv=document.createElement('canvas');cv.width=cv.height=s;const x=cv.getContext('2d');
+  const g=x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.22,'rgba(248,253,255,.92)');
+  g.addColorStop(.5,'rgba(225,245,255,.28)');g.addColorStop(1,'rgba(220,245,255,0)');
+  x.fillStyle=g;x.fillRect(0,0,s,s);const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;return t;}
+const pGeo=new THREE.BufferGeometry();
+pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+pGeo.setAttribute('aLife',new THREE.BufferAttribute(pLife,1));
+pGeo.setAttribute('aSize',new THREE.BufferAttribute(pSize,1));
+const pMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.NormalBlending,
+  uniforms:{uTex:{value:sprayTex()},uPix:{value:renderer.getPixelRatio()}},
+  vertexShader:`attribute float aLife;attribute float aSize;varying float vL;uniform float uPix;
+    void main(){vL=aLife;vec4 mv=modelViewMatrix*vec4(position,1.0);
+    gl_PointSize=aSize*uPix*(150.0/max(-mv.z,0.1))*(0.5+0.5*aLife);gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:`uniform sampler2D uTex;varying float vL;void main(){if(vL<=0.0)discard;
+    vec4 t=texture2D(uTex,gl_PointCoord);float a=t.a*smoothstep(0.0,0.08,vL)*(0.55+0.45*vL);
+    gl_FragColor=vec4(t.rgb,a);}`});
+const points=new THREE.Points(pGeo,pMat); points.frustumCulled=false; pGeo.computeBoundingSphere=()=>{}; pGeo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e6); scene.add(points);
+
+function emit(ox,oy,oz,hx,hz,speed,dt){
+  let n=Math.floor(speed*120*dt+Math.random());
+  for(let s=0;s<n;s++){const i=pHead;pHead=(pHead+1)%P;
+    const r=Math.random();
+    const up=4.2+r*4.5+speed*0.9;             // strong vertical sheet
+    const backF=0.6+speed*0.5;                // slight back rake
+    const lat=(Math.random()-0.5)*0.9;        // narrow fan
+    pVel[i*3]   = -hx*backF + (-hz)*lat;
+    pVel[i*3+1] = up;
+    pVel[i*3+2] = -hz*backF + ( hx)*lat;
+    pPos[i*3]=ox+(Math.random()-0.5)*0.1;
+    pPos[i*3+1]=oy+0.04;
+    pPos[i*3+2]=oz+(Math.random()-0.5)*0.1;
+    pLife[i]=1.0; pSize[i]=0.28+Math.random()*Math.random()*0.8; pKind[i]=0;}  // mostly small, few big
+}
+function emitSplash(x,y,z,power){
+  const N=Math.floor(22+power*16);
+  for(let s=0;s<N;s++){const i=pHead;pHead=(pHead+1)%P;
+    const a=Math.random()*6.283, r=Math.random();
+    pVel[i*3]=Math.cos(a)*(1.4+r*2.6);
+    pVel[i*3+1]=2.4+Math.random()*3.4+power*0.7;
+    pVel[i*3+2]=Math.sin(a)*(1.4+r*2.6);
+    pPos[i*3]=x+(Math.random()-0.5)*0.4; pPos[i*3+1]=y+0.05; pPos[i*3+2]=z+(Math.random()-0.5)*0.4;
+    pLife[i]=1.0; pSize[i]=0.4+Math.random()*1.1; pKind[i]=0;}
+}
+function emitMist(ox,oy,oz){
+  const i=pHead;pHead=(pHead+1)%P;
+  pVel[i*3]=WIND.x*1.2+(Math.random()-0.5)*0.6; pVel[i*3+1]=0.8+Math.random()*1.0; pVel[i*3+2]=WIND.y*1.2+(Math.random()-0.5)*0.6;
+  pPos[i*3]=ox+(Math.random()-0.5)*1.0; pPos[i*3+1]=oy+0.2; pPos[i*3+2]=oz+(Math.random()-0.5)*1.0;
+  pLife[i]=1.0; pSize[i]=0.7+Math.random()*1.0; pKind[i]=2;
+}
+function emitFoam(ox,oy,oz,hx,hz){
+  for(let s=0;s<1;s++){const i=pHead;pHead=(pHead+1)%P;
+    pVel[i*3]=-hx*0.5+(Math.random()-0.5)*0.5; pVel[i*3+1]=0.25+Math.random()*0.3; pVel[i*3+2]=-hz*0.5+(Math.random()-0.5)*0.5;
+    pPos[i*3]=ox+(Math.random()-0.5)*0.25; pPos[i*3+1]=oy; pPos[i*3+2]=oz+(Math.random()-0.5)*0.25;
+    pLife[i]=1.0; pSize[i]=0.35+Math.random()*0.5; pKind[i]=1;}
+}
+function integrate(dt,t){
+  for(let i=0;i<P;i++){ if(pLife[i]<=0)continue;
+    const k=pKind[i];
+    pLife[i]-=dt*(k>1.5?0.55:(k>0.5?0.9:1.9));
+    if(pLife[i]<=0){pPos[i*3+1]=-999;pSize[i]=0;continue;}
+    if(k>1.5){ // mist
+      pVel[i*3+1]-=0.6*dt; pVel[i*3]*=0.99;pVel[i*3+2]*=0.99; pSize[i]+=dt*1.4;
+      pPos[i*3]+=pVel[i*3]*dt; pPos[i*3+1]+=pVel[i*3+1]*dt; pPos[i*3+2]+=pVel[i*3+2]*dt;
+    } else if(k>0.5){
+      pVel[i*3]*=0.88; pVel[i*3+2]*=0.88; pVel[i*3+1]*=0.8; pSize[i]+=dt*0.9;
+      pPos[i*3]+=pVel[i*3]*dt; pPos[i*3+1]+=pVel[i*3+1]*dt; pPos[i*3+2]+=pVel[i*3+2]*dt;
+      const sf=sampleSurface(pPos[i*3],pPos[i*3+2],t); pPos[i*3+1]=sf.y+0.03;  // glue to surface
+    } else {
+      pVel[i*3+1]-=14.0*dt; pVel[i*3]*=0.99;pVel[i*3+1]*=0.995;pVel[i*3+2]*=0.99; pSize[i]+=dt*0.5;
+      pPos[i*3]+=pVel[i*3]*dt; pPos[i*3+1]+=pVel[i*3+1]*dt; pPos[i*3+2]+=pVel[i*3+2]*dt;
+      const su2=sampleSurface(pPos[i*3],pPos[i*3+2],t);
+      if(pPos[i*3+1]<su2.y-0.15){ pLife[i]=0; pPos[i*3+1]=-999; pSize[i]=0; }
+    }
+  }
+  pGeo.attributes.position.needsUpdate=true; pGeo.attributes.aLife.needsUpdate=true; pGeo.attributes.aSize.needsUpdate=true;
+}
+
+/* ===== loop ===== */
+const _m=new THREE.Matrix4(),_up=new THREE.Vector3(),_fwd=new THREE.Vector3(),_rt=new THREE.Vector3(),_q=new THREE.Quaternion(),_tail=new THREE.Vector3();
+const WORLD_UP=new THREE.Vector3(0,1,0),qTarget=new THREE.Quaternion(),qTmp=new THREE.Quaternion();
+const camPos=new THREE.Vector3(0,3,9), camAim=new THREE.Vector3(), camLook=new THREE.Vector3(0,0.7,0);
+// --- custom orbit controls (drag = rotate, pinch/wheel = zoom) ---
+// camera orbit OFFSET relative to "behind the surfer" (drag look, dbl-click recenter, pinch/scroll zoom)
+let yawOff=0, camPitch=0.24, camDist=9.0;
+let dragging=false, lx=0, ly=0, pinch0=0, dist0=0;
+const cv2=renderer.domElement;
+cv2.addEventListener('pointerdown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;cv2.setPointerCapture(e.pointerId);});
+cv2.addEventListener('pointermove',e=>{if(!dragging)return;yawOff-=(e.clientX-lx)*0.005;camPitch=Math.max(-0.05,Math.min(1.2,camPitch+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;});
+cv2.addEventListener('pointerup',e=>{dragging=false;});
+cv2.addEventListener('dblclick',()=>{yawOff=0;camPitch=0.24;camDist=9.0;}); // recenter look offset
+cv2.addEventListener('wheel',e=>{camDist=Math.max(4,Math.min(20,camDist+e.deltaY*0.01));e.preventDefault();},{passive:false});
+cv2.addEventListener('touchstart',e=>{if(e.touches.length===2){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;pinch0=Math.hypot(dx,dy);dist0=camDist;}},{passive:true});
+cv2.addEventListener('touchmove',e=>{if(e.touches.length===2&&pinch0){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;camDist=Math.max(4,Math.min(20,dist0*pinch0/Math.hypot(dx,dy)));}},{passive:true});
+const KL=['a','arrowleft'],KR=['d','arrowright'],KU=['w','arrowup'],KD=['s','arrowdown'];
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+  if(KL.includes(k))keys.left=true; if(KR.includes(k))keys.right=true; if(KU.includes(k))keys.up=true; if(KD.includes(k))keys.down=true;
+  if([...KL,...KR,...KU,...KD].includes(k))e.preventDefault();});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();
+  if(KL.includes(k))keys.left=false; if(KR.includes(k))keys.right=false; if(KU.includes(k))keys.up=false; if(KD.includes(k))keys.down=false;});
+let prevX=0,prevZ=2.6,fwdDist=0,prevSurf=0;
+let posX=0,posZ=2.7,heading=0,speed=6.0,prevSpeed=6.0,accelLP=0,rollS=0,pitchS=0,camBaseYaw=Math.PI;
+let waveTime=0;
+const keys={left:false,right:false,up:false,down:false};
+let airborne=false, vyAir=0, yPos=0, landT=0, impact=0, surfVelS=0, jumpCD=0;
+const clock=new THREE.Clock(); let t=0; prevSurf=sampleSurface(0,2.7,0).y;
+
+function frame(){
+  let dt=Math.min(clock.getDelta(),0.05); if(dt<1e-3)dt=1e-3; t+=dt;
+  const wspeed=0.30+0.50*AMP;            // small waves -> slower water
+  waveTime+=dt*wspeed;
+  oceanMat.uniforms.uTime.value=waveTime; oceanMat.uniforms.uCam.value.copy(camera.position);
+  sky.material.uniforms.uTime.value=t;
+
+  // ---- controls: A/D carve (lean + turn), W/S accelerate / brake (lean fwd / back) ----
+  const turnIn=(keys.left?1:0)-(keys.right?1:0);
+  const accelIn=(keys.up?1:0)-(keys.down?1:0);
+  prevSpeed=speed;
+  const tSpeed = 6.0 + (keys.up?3.0:0) - (keys.down?2.5:0);   // always forward; W faster, S slower
+  speed += (tSpeed-speed)*Math.min(1,dt*2.0);
+  speed=Math.max(speed,2.0);
+  accelLP += ((speed-prevSpeed)/dt - accelLP)*Math.min(1,dt*5);
+  heading += turnIn*1.25*dt;                       // steer; board travels where it faces
+  posX += Math.cos(heading)*speed*dt;
+  posZ += Math.sin(heading)*speed*dt;
+  const sx=posX, sz=posZ;
+  const su=sampleSurface(sx,sz,waveTime);
+  const hx=Math.cos(heading), hz=Math.sin(heading);
+  const targetRoll  = turnIn*(0.30+speed*0.03);                          // lean INTO the turn
+  const targetPitch = (keys.down?0.32:0) + (keys.up?-0.18:0) - accelLP*0.035; // back / forward weight
+  rollS  += (targetRoll - rollS )*Math.min(1,dt*5);
+  pitchS += (targetPitch- pitchS)*Math.min(1,dt*5);
+
+  const baseY=su.y+SURF_LIFT;
+  const surfVel=(su.y-prevSurf)/dt; prevSurf=su.y;
+  if(isFinite(surfVel)) surfVelS += (surfVel-surfVelS)*Math.min(1,dt*9);
+  if(!isFinite(surfVelS)) surfVelS=0;                 // smoothed launch velocity, NaN-guarded
+  if(jumpCD>0) jumpCD-=dt;
+  if(!airborne){
+    yPos=baseY+Math.sin(t*2.1)*0.04;
+    if(surfVelS>1.6 && landT<=0 && jumpCD<=0){ airborne=true; vyAir=Math.min(Math.min(surfVelS,7)*0.55+0.5, 3.4); }
+  } else {
+    yPos+=vyAir*dt; vyAir-=13.0*dt;
+    if(yPos<=baseY){ airborne=false; yPos=baseY; impact=Math.min(Math.abs(vyAir),9);
+      landT=0.34; jumpCD=0.6; emitSplash(surfer.position.x,baseY,surfer.position.z,impact); }
+  }
+  // landing compression: board dips below the surface then springs back
+  let sink=0;
+  if(landT>0){ landT-=dt; const k=Math.max(landT,0)/0.34; sink=(0.10+impact*0.03)*k; }
+  surfer.position.set(sx, yPos - sink, sz);
+  // up vector: clamp so it can never point downward, then limit tilt toward vertical
+  _up.set(su.nx, Math.max(su.ny,0.30), su.nz).normalize();
+  _up.lerp(WORLD_UP, airborne?0.7:0.45).normalize();   // stable, board doesn't over-tilt
+  _fwd.set(hx,0,hz); _fwd.addScaledVector(_up,-_up.dot(_fwd)).normalize();
+  _fwd.addScaledVector(_up,0.14).normalize();           // planing nose-up
+  _rt.crossVectors(_up,_fwd).normalize(); _up.crossVectors(_fwd,_rt).normalize();
+  _m.makeBasis(_fwd,_up,_rt); qTarget.setFromRotationMatrix(_m);
+  qTmp.setFromAxisAngle(_fwd, rollS); qTarget.premultiply(qTmp);
+  qTmp.setFromAxisAngle(_rt, pitchS); qTarget.multiply(qTmp);
+  if(airborne){ qTmp.setFromAxisAngle(_rt, 0.22); qTarget.multiply(qTmp); } // nose-up air pitch
+  // damped slerp -> smooth, frame-rate independent; no sudden flips possible
+  surfer.quaternion.slerp(qTarget, 1-Math.exp(-dt*10));
+  const bodyG=surfer.userData.body;
+  const crouch=THREE.MathUtils.clamp(0.03*(speed-2)+Math.abs(turnIn)*0.05+(accelIn>0?0.04:0),0,0.16);
+  bodyG.position.y += (surfer.userData.bodyBaseY - crouch - bodyG.position.y)*Math.min(1,dt*5);
+
+  oceanMat.uniforms.uBoardPos.value.set(sx,su.y,sz);
+  oceanMat.uniforms.uBoardDir.value.set(hx,hz);
+  oceanMat.uniforms.uBoardOn.value = airborne?0.0:(1.0+ (landT>0? landT*2.0:0.0)); // deeper dent on landing
+  _tail.set(-0.55,-0.02,0.22).applyQuaternion(surfer.quaternion).add(surfer.position);
+  const spraySpeed=THREE.MathUtils.clamp(speed*0.28,0.5,3.2);
+  if(!airborne) emit(_tail.x,_tail.y,_tail.z,hx,hz,spraySpeed,dt);
+  // whitecaps crashing -> mist
+  for(let q=0;q<12;q++){
+    const mxr=sx+(Math.random()-0.2)*36, mzr=sz+(Math.random()-0.5)*36;
+    if(crestFoam(mxr,mzr,waveTime)>0.78){
+      const my=sampleSurface(mxr,mzr,waveTime).y;
+      emitMist(mxr,my,mzr);
+    }
+  }
+  // contact foam strip under the rail + bow spray at the nose
+  if(!airborne) for(let q=-1;q<=1;q+=0.5){
+    const cp=new THREE.Vector3(q,-0.03,0.16).applyQuaternion(surfer.quaternion).add(surfer.position);
+    emitFoam(cp.x,cp.y,cp.z,hx,hz);
+  }
+  const nose=new THREE.Vector3(1.05,-0.02,0).applyQuaternion(surfer.quaternion).add(surfer.position);
+  emitFoam(nose.x,nose.y,nose.z,hx,hz);
+  integrate(dt,waveTime);
+
+  // third-person follow camera: sits behind the surfer and follows where he faces
+  const camAng = Math.PI + yawOff;                    // camera angle from mouse ONLY (independent of facing)
+  camPos.set(
+    sx + Math.cos(camAng)*Math.cos(camPitch)*camDist,
+    su.y + 0.9 + Math.sin(camPitch)*camDist,
+    sz + Math.sin(camAng)*Math.cos(camPitch)*camDist
+  );
+  camera.position.lerp(camPos, 1-Math.exp(-dt*4.5));  // smooth follow (slight lag = dynamic)
+  camLook.lerp(camAim.set(sx, su.y+0.6, sz), 1-Math.exp(-dt*6));
+  camera.lookAt(camLook);
+
+  renderer.render(scene,camera); requestAnimationFrame(frame);
+}
+frame();
+
+document.getElementById('amp').addEventListener('input',e=>{
+  AMP=parseFloat(e.target.value); oceanMat.uniforms.uAmp.value=AMP;
+});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  pMat.uniforms.uPix.value=renderer.getPixelRatio();});
+
+}catch(e){console.error(e);document.getElementById('err').style.display='flex';document.getElementById('hud').style.display='none';}
+</script>
+</body>
+</html>
