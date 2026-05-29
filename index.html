@@ -40,6 +40,7 @@
   <aside id="rail" class="rail">
     <div class="rail-section">
       <div class="rail-head">PRIORITY FEED</div>
+      <input id="feedSearch" class="feed-search" type="text" placeholder="// filter signal..." autocomplete="off" />
       <div id="feed" class="feed"></div>
     </div>
     <div class="rail-section filters">
@@ -52,6 +53,7 @@
     </div>
     <div class="rail-foot">
       <span id="profileSummary" class="muted"></span>
+      <button id="resetBtn" class="btn-reset" title="Clear personalization and restore baseline">RESET PROFILE</button>
     </div>
   </aside>
 
@@ -63,6 +65,7 @@
     <div class="map-corner tl"></div><div class="map-corner tr"></div>
     <div class="map-corner bl"></div><div class="map-corner br"></div>
     <div id="mapBadge" class="map-badge">GLOBAL THEATER &middot; <span id="badgeCount">0</span> CONTACTS</div>
+    <div id="legend" class="legend"></div>
   </main>
 
   <section id="dossier" class="dossier" aria-hidden="true">

@@ -51,7 +51,11 @@ a real news API and geocode results there.
   the topic; SUPPRESS (cross) hides it and blocks the topic.
 - Personalization: ranks and filters against your interest profile, removes
   blocked topics, keeps a PRIORITY FEED rail synced with the map, category
-  filters, and a suppressed-topics list with one-click restore.
+  filters, feed search, a marker legend, and a suppressed-topics list with
+  one-click restore. A Reset Profile control restores the baseline.
+- SUPPRESS blocks the story's specific tags (exact match), not its whole
+  category, so muting one story does not wipe an unrelated topic. Scoring uses
+  exact token overlap (no loose substring matching).
 - State persists in `localStorage` (profile, per-story reactions, live cache).
 
 ## Files
