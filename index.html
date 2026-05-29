@@ -432,7 +432,15 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();
 addEventListener('keyup',e=>{const k=e.key.toLowerCase();
   if(KL.includes(k))keys.left=false; if(KR.includes(k))keys.right=false; if(KU.includes(k))keys.up=false; if(KD.includes(k))keys.down=false;});
 let prevX=0,prevZ=2.6,fwdDist=0,prevSurf=0;
-let posX=0,posZ=2.7,heading=0,speed=6.0,prevSpeed=6.0,accelLP=0,rollS=0,pitchS=0,camBaseYaw=Math.PI;
+let posX=0,posZ=2.7,heading=0,velX=6.0,velZ=0.0,yawRate=0,speed=6.0,prevSpeed=6.0,accelLP=0,rollS=0,pitchS=0,camYaw=Math.PI;
+// ---- surf-physics tunables (tweak to taste) ----
+const WAVE_PUSH=10.0,   // wave energy pushing the board forward (sets ~6 cruise speed)
+      GRAV_SCALE=1.35,  // how strongly gravity pulls the board down the wave face
+      DRAG_LIN=0.35, DRAG_QUAD=0.22,  // water drag: linear + speed-squared
+      GRIP=6.5,         // rail/fin grip: how fast sideways slip becomes forward travel
+      PUMP=7.0, BRAKE=6.0,            // W pump thrust / S brake force (slows, won't fully stop)
+      TURN_RATE=1.5, YAW_EASE=6.0,    // max carve rate (rad/s) / steering responsiveness
+      CAM_LAZY=1.6;     // how quickly the camera drifts back behind the board
 let waveTime=0;
 const keys={left:false,right:false,up:false,down:false};
 let airborne=false, vyAir=0, yPos=0, landT=0, impact=0, surfVelS=0, jumpCD=0;
@@ -445,22 +453,54 @@ function frame(){
   oceanMat.uniforms.uTime.value=waveTime; oceanMat.uniforms.uCam.value.copy(camera.position);
   sky.material.uniforms.uTime.value=t;
 
-  // ---- controls: A/D carve (lean + turn), W/S accelerate / brake (lean fwd / back) ----
-  const turnIn=(keys.left?1:0)-(keys.right?1:0);
+  // ---- input ----
+  const turnIn=(keys.left?1:0)-(keys.right?1:0);   // A/D carve
   const accelIn=(keys.up?1:0)-(keys.down?1:0);
-  prevSpeed=speed;
-  const tSpeed = 6.0 + (keys.up?3.0:0) - (keys.down?2.5:0);   // always forward; W faster, S slower
-  speed += (tSpeed-speed)*Math.min(1,dt*2.0);
-  speed=Math.max(speed,2.0);
-  accelLP += ((speed-prevSpeed)/dt - accelLP)*Math.min(1,dt*5);
-  heading += turnIn*1.25*dt;                       // steer; board travels where it faces
-  posX += Math.cos(heading)*speed*dt;
-  posZ += Math.sin(heading)*speed*dt;
+
+  // ===== horizontal dynamics: a real velocity vector with momentum =====
+  // The board carries inertia, driven forward by the wave + gravity down the wave
+  // face, slowed by water drag, and held on line by rail/fin grip. A/D set the
+  // board's turn rate (its heading); grip then steers the *velocity* to follow it.
+  // Tap a direction and you settle onto a new line and hold it -- no more orbiting.
+  let hx=Math.cos(heading), hz=Math.sin(heading);          // board pointing dir
+  const su0=sampleSurface(posX,posZ,waveTime);             // wave slope under the board
+  if(!airborne){
+    // gravity along the wave face: (nx,nz) of the surface normal point downhill
+    velX += G*GRAV_SCALE*su0.ny*su0.nx*dt;
+    velZ += G*GRAV_SCALE*su0.ny*su0.nz*dt;
+    // wave push + pump(W)/brake(S) along the heading
+    const drive=WAVE_PUSH + (keys.up?PUMP:0) - (keys.down?BRAKE:0);
+    velX += hx*drive*dt; velZ += hz*drive*dt;
+    // water drag (linear + quadratic), capped so a big dt can't reverse velocity
+    const sp0=Math.hypot(velX,velZ);
+    const d=Math.min((DRAG_LIN+DRAG_QUAD*sp0)*dt,0.9);
+    velX-=velX*d; velZ-=velZ*d;
+    // rail/fin grip: kill sideways slip so the board tracks where it points
+    const fSpd=velX*hx+velZ*hz;                            // forward component
+    const keep=Math.exp(-GRIP*dt);
+    const latX=(velX-fSpd*hx)*keep, latZ=(velZ-fSpd*hz)*keep;
+    velX=fSpd*hx+latX; velZ=fSpd*hz+latZ;
+  } else {
+    const ad=Math.exp(-0.6*dt); velX*=ad; velZ*=ad;        // airborne: coast on light air drag
+  }
+
+  // ===== steering: speed-scaled, momentum-eased turn rate (no instant snapping) =====
+  const turnAuth=TURN_RATE*THREE.MathUtils.clamp(Math.hypot(velX,velZ)/4.0,0.15,1.0); // need speed to carve
+  yawRate += (turnIn*turnAuth - yawRate)*(1-Math.exp(-dt*YAW_EASE));
+  heading += yawRate*dt;
+  hx=Math.cos(heading); hz=Math.sin(heading);              // refresh after steering
+
+  // integrate position from the actual velocity vector
+  posX += velX*dt; posZ += velZ*dt;
+  speed = Math.hypot(velX,velZ);
   const sx=posX, sz=posZ;
   const su=sampleSurface(sx,sz,waveTime);
-  const hx=Math.cos(heading), hz=Math.sin(heading);
-  const targetRoll  = turnIn*(0.30+speed*0.03);                          // lean INTO the turn
-  const targetPitch = (keys.down?0.32:0) + (keys.up?-0.18:0) - accelLP*0.035; // back / forward weight
+
+  // banking (lean into the carve) + fore/aft weight shift from acceleration
+  accelLP += ((speed-prevSpeed)/dt - accelLP)*Math.min(1,dt*5); prevSpeed=speed;
+  const leanAmt=THREE.MathUtils.clamp(yawRate/TURN_RATE,-1,1);
+  const targetRoll  = leanAmt*(0.30+speed*0.028);                            // lean INTO the turn
+  const targetPitch = (keys.down?0.30:0) + (keys.up?-0.16:0) - accelLP*0.03; // back / forward weight
   rollS  += (targetRoll - rollS )*Math.min(1,dt*5);
   pitchS += (targetPitch- pitchS)*Math.min(1,dt*5);
 
@@ -473,7 +513,7 @@ function frame(){
     yPos=baseY+Math.sin(t*2.1)*0.04;
     if(surfVelS>1.6 && landT<=0 && jumpCD<=0){ airborne=true; vyAir=Math.min(Math.min(surfVelS,7)*0.55+0.5, 3.4); }
   } else {
-    yPos+=vyAir*dt; vyAir-=13.0*dt;
+    yPos+=vyAir*dt; vyAir-=G*dt;   // real gravity on the air arc
     if(yPos<=baseY){ airborne=false; yPos=baseY; impact=Math.min(Math.abs(vyAir),9);
       landT=0.34; jumpCD=0.6; emitSplash(surfer.position.x,baseY,surfer.position.z,impact); }
   }
@@ -520,8 +560,11 @@ function frame(){
   emitFoam(nose.x,nose.y,nose.z,hx,hz);
   integrate(dt,waveTime);
 
-  // third-person follow camera: sits behind the surfer and follows where he faces
-  const camAng = Math.PI + yawOff;                    // camera angle from mouse ONLY (independent of facing)
+  // lazy-follow third-person camera: holds still during a turn, then gently drifts
+  // to settle behind the board afterward. Drag (yawOff) is an offset on top of that.
+  let dYaw=heading+Math.PI-camYaw; dYaw=Math.atan2(Math.sin(dYaw),Math.cos(dYaw)); // shortest angle
+  camYaw += dYaw*(1-Math.exp(-dt*CAM_LAZY));
+  const camAng = camYaw + yawOff;
   camPos.set(
     sx + Math.cos(camAng)*Math.cos(camPitch)*camDist,
     su.y + 0.9 + Math.sin(camPitch)*camDist,
