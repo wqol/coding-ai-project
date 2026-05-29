@@ -22,12 +22,13 @@
     critOnly: false,
     showLinks: false,
     showTracks: false,
+    trackTimer: null,
     selected: null,
     selectedCountry: null,
     navList: [],
     lastRefresh: meta.lastRefresh ? new Date(meta.lastRefresh) : null
   };
-  var map = null, markerLayer = null, linkLayer = null, trackLayer = null, countryLayer = null, markerById = {};
+  var map = null, markerLayer = null, linkLayer = null, trackLayer = null, countryLayer = null, graticuleLayer = null, nightLayer = null, markerById = {};
 
   /* ---------- persistence ---------- */
   function loadJSON(key, fb) { try { var v = JSON.parse(localStorage.getItem(key)); return v == null ? fb : v; } catch (e) { return fb; } }
@@ -111,10 +112,11 @@
     if (typeof L === "undefined") { document.getElementById("map").innerHTML =
       '<div style="padding:24px;color:#5b7186">MAP UPLINK UNAVAILABLE (offline). Feed and dossier still operational.</div>'; return; }
     map = L.map("map", { zoomControl: true, attributionControl: true, worldCopyJump: true, minZoom: 2, maxZoom: 8, center: [25, 10], zoom: 2 });
-    ["countries:350", "links:360", "tracks:650"].forEach(function (p) {
+    ["night:335", "graticule:340", "countries:350", "links:360", "tracks:650"].forEach(function (p) {
       var n = p.split(":")[0]; map.createPane(n); var pane = map.getPane(n); if (pane) { pane.style.zIndex = p.split(":")[1]; if (n !== "countries") pane.style.pointerEvents = "none"; }
     });
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+    drawGraticule(); drawNight(); setInterval(drawNight, 120000);
     linkLayer = L.layerGroup().addTo(map);
     markerLayer = L.layerGroup().addTo(map);
     trackLayer = L.layerGroup().addTo(map);
@@ -122,6 +124,31 @@
     if (v && v.c) { try { map.setView(v.c, v.z); } catch (e) {} }
     map.on("moveend zoomend", function () { try { saveJSON(LS.view, { c: [map.getCenter().lat, map.getCenter().lng], z: map.getZoom() }); } catch (e) {} });
     loadCountries();
+  }
+  function drawGraticule() {
+    if (!map || typeof L.polyline !== "function") return;
+    if (!graticuleLayer) graticuleLayer = L.layerGroup().addTo(map);
+    graticuleLayer.clearLayers();
+    var i, o = function (z) { return { pane: "graticule", color: "#22d3ee", weight: z ? 0.8 : 0.4, opacity: z ? 0.28 : 0.1, interactive: false }; };
+    for (i = -180; i <= 180; i += 30) L.polyline([[-85, i], [85, i]], o(i === 0)).addTo(graticuleLayer);
+    for (i = -60; i <= 60; i += 30) L.polyline([[i, -180], [i, 180]], o(i === 0)).addTo(graticuleLayer);
+  }
+  function terminatorRing() {
+    var rad = Math.PI / 180, jd = Date.now() / 86400000 + 2440587.5, T = (jd - 2451545) / 36525;
+    var Ls = (280.46 + 36000.77 * T) % 360, g = (357.528 + 35999.05 * T) * rad;
+    var lambda = (Ls + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad, eps = (23.4393 - 0.013 * T) * rad;
+    var decl = Math.asin(Math.sin(eps) * Math.sin(lambda)); if (Math.abs(decl) < 1e-6) decl = 1e-6;
+    var GMST = (280.46061837 + 360.98564736629 * (jd - 2451545)) % 360;
+    var RA = Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda)) / rad;
+    var sub = ((RA - GMST + 540) % 360) - 180, pts = [], lon;
+    for (lon = -180; lon <= 180; lon += 2) pts.push([Math.atan(-Math.cos((lon - sub) * rad) / Math.tan(decl)) / rad, lon]);
+    var pole = decl > 0 ? -90 : 90; pts.push([pole, 180]); pts.push([pole, -180]);
+    return pts;
+  }
+  function drawNight() {
+    if (!map || typeof L.polygon !== "function") return;
+    if (nightLayer) { try { map.removeLayer(nightLayer); } catch (e) {} nightLayer = null; }
+    try { nightLayer = L.polygon(terminatorRing(), { pane: "night", stroke: false, fillColor: "#000010", fillOpacity: 0.34, interactive: false }).addTo(map); } catch (e) {}
   }
   function jitter(stories) {
     var groups = {};
@@ -253,9 +280,11 @@
   /* ---------- tracks (planes + tankers) ---------- */
   function toggleTracks() {
     state.showTracks = !state.showTracks;
-    document.getElementById("tracksBtn").classList.toggle("on", state.showTracks);
-    if (!state.showTracks) { if (trackLayer) trackLayer.clearLayers(); return; }
+    var btn = document.getElementById("tracksBtn"); btn.classList.toggle("on", state.showTracks);
+    if (state.trackTimer) { clearInterval(state.trackTimer); state.trackTimer = null; }
+    if (!state.showTracks) { if (trackLayer) trackLayer.clearLayers(); btn.textContent = "▲ TRACKS"; return; }
     fetchTracks();
+    state.trackTimer = setInterval(function () { if (state.showTracks) fetchTracks(); }, 25000);
   }
   function fetchTracks() {
     if (!trackLayer || typeof window.fetch !== "function") return;
@@ -273,13 +302,20 @@
     planes.forEach(function (p) {
       if (typeof L.divIcon !== "function") return;
       var icon = L.divIcon({ className: "trk trk-plane", html: '<span style="transform:rotate(' + (p.heading || 0) + 'deg)">&#9650;</span>', iconSize: [16, 16] });
-      L.marker([p.lat, p.lng], { icon: icon, pane: "tracks", interactive: true }).bindTooltip((p.callsign || "FLIGHT") + (p.alt ? " &middot; " + Math.round(p.alt) + "m" : ""), { className: "mk-tip" }).addTo(trackLayer);
+      L.marker([p.lat, p.lng], { icon: icon, pane: "tracks", interactive: true })
+        .bindTooltip((p.callsign || "FLIGHT") + (p.alt ? " &middot; " + Math.round(p.alt) + "m" : ""), { className: "mk-tip" })
+        .bindPopup("<b>" + esc(p.callsign || "FLIGHT") + "</b><br>AIRCRAFT<br>ALT " + Math.round(p.alt || 0) + " m<br>HDG " + Math.round(p.heading || 0) + "°", { className: "trk-pop" })
+        .addTo(trackLayer);
     });
     tankers.forEach(function (t) {
       if (typeof L.divIcon !== "function") return;
       var icon = L.divIcon({ className: "trk trk-ship", html: "&#9632;", iconSize: [12, 12] });
-      L.marker([t.lat, t.lng], { icon: icon, pane: "tracks", interactive: true }).bindTooltip("TANKER &middot; " + (t.name || "vessel") + (t.sample ? " (sample)" : ""), { className: "mk-tip" }).addTo(trackLayer);
+      L.marker([t.lat, t.lng], { icon: icon, pane: "tracks", interactive: true })
+        .bindTooltip("TANKER &middot; " + (t.name || "vessel") + (t.sample ? " (sample)" : ""), { className: "mk-tip" })
+        .bindPopup("<b>" + esc(t.name || "vessel") + "</b><br>OIL TANKER" + (t.sample ? '<br><span style="color:#ffb000">SAMPLE POSITION</span>' : ""), { className: "trk-pop" })
+        .addTo(trackLayer);
     });
+    var n = planes.length + tankers.length, tbtn = document.getElementById("tracksBtn"); if (tbtn) tbtn.textContent = "▲ TRACKS (" + n + ")";
     toast("TACTICAL OVERLAY: " + planes.length + " aircraft, " + tankers.length + " tankers" + (d.planesLive ? "" : " (fallback)"), d.planesLive ? "" : "warn");
   }
 
