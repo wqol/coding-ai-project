@@ -52,7 +52,7 @@ async function getPlanes(q) {
       .filter(s => Number.isFinite(s[6]) && Number.isFinite(s[5]) && !s[8])
       .map(s => ({ lat: s[6], lng: s[5], heading: s[10] || 0, callsign: (s[1] || "").trim() || "UNKNOWN", alt: s[7] || 0 }));
     if (!mapped.length) return { list: SAMPLE_PLANES, live: false };
-    const cap = 300, step = Math.max(1, Math.floor(mapped.length / cap));
+    const cap = 2000, step = Math.max(1, Math.floor(mapped.length / cap));
     const sampled = []; for (let i = 0; i < mapped.length && sampled.length < cap; i += step) sampled.push(mapped[i]);
     return { list: sampled, live: true };
   } catch (e) {

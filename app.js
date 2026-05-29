@@ -31,7 +31,8 @@
     navList: [],
     lastRefresh: meta.lastRefresh ? new Date(meta.lastRefresh) : null
   };
-  var map = null, markerLayer = null, linkLayer = null, trackLayer = null, countryLayer = null, graticuleLayer = null, nightLayer = null, markerById = {};
+  var map = null, markerLayer = null, linkLayer = null, trackLayer = null, countryLayer = null, graticuleLayer = null, nightLayer = null, trackRenderer = null, markerById = {};
+  var soundOn = loadJSON("omni_snd_v1", true), actx = null;
 
   /* ---------- persistence ---------- */
   function loadJSON(key, fb) { try { var v = JSON.parse(localStorage.getItem(key)); return v == null ? fb : v; } catch (e) { return fb; } }
@@ -117,8 +118,9 @@
       '<div style="padding:24px;color:#5b7186">MAP UPLINK UNAVAILABLE (offline). Feed and dossier still operational.</div>'; return; }
     map = L.map("map", { zoomControl: true, attributionControl: true, worldCopyJump: true, minZoom: 2, maxZoom: 8, center: [25, 10], zoom: 2 });
     ["night:335", "graticule:340", "countries:350", "links:360", "tracks:650"].forEach(function (p) {
-      var n = p.split(":")[0]; map.createPane(n); var pane = map.getPane(n); if (pane) { pane.style.zIndex = p.split(":")[1]; if (n !== "countries") pane.style.pointerEvents = "none"; }
+      var n = p.split(":")[0]; map.createPane(n); var pane = map.getPane(n); if (pane) { pane.style.zIndex = p.split(":")[1]; if (n !== "countries" && n !== "tracks") pane.style.pointerEvents = "none"; }
     });
+    trackRenderer = (typeof L.canvas === "function") ? L.canvas({ padding: 0.5, pane: "tracks" }) : null;
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
     drawGraticule(); drawNight(); setInterval(drawNight, 120000);
     linkLayer = L.layerGroup().addTo(map);
@@ -252,9 +254,9 @@
     if (g.type === "MultiPolygon") { for (var m = 0; m < g.coordinates.length; m++) if (inPoly(g.coordinates[m])) return true; return false; }
     return false;
   }
-  function storiesInFeature(f) { return ranked().filter(function (s) { return !isBlocked(s) && pointInFeature(s.lat, s.lng, f); }); }
+  function storiesInFeature(f) { return allStories().filter(function (s) { return pointInFeature(s.lat, s.lng, f); }).sort(function (a, b) { return String(b.published_date || "").localeCompare(String(a.published_date || "")); }); }
   function openCountry(f, layer) {
-    var cname = name(f); state.selectedCountry = cname;
+    var cname = name(f); state.selectedCountry = cname; sfx("country");
     if (countryLayer) { countryLayer.resetStyle(); }
     if (layer) layer.setStyle({ color: "#ffb000", weight: 1.4, fillColor: "#1a1205", fillOpacity: 0.18 });
     closeDossier(true);
@@ -303,7 +305,7 @@
   /* ---------- tracks (planes + tankers) ---------- */
   function toggleTracks() {
     state.showTracks = !state.showTracks;
-    var btn = document.getElementById("tracksBtn"); btn.classList.toggle("on", state.showTracks); btn.setAttribute("aria-pressed", state.showTracks ? "true" : "false");
+    var btn = document.getElementById("tracksBtn"); btn.classList.toggle("on", state.showTracks); btn.setAttribute("aria-pressed", state.showTracks ? "true" : "false"); sfx("toggle");
     if (state.trackTimer) { clearInterval(state.trackTimer); state.trackTimer = null; }
     if (!state.showTracks) { if (trackLayer) trackLayer.clearLayers(); btn.textContent = "▲ TRACKS"; return; }
     fetchTracks();
@@ -312,9 +314,7 @@
   function fetchTracks() {
     if (!trackLayer || typeof window.fetch !== "function") return;
     var btn = document.getElementById("tracksBtn"); btn.classList.add("busy");
-    var qs = "";
-    try { var b = map.getBounds(); qs = "?lamin=" + b.getSouth().toFixed(3) + "&lomin=" + b.getWest().toFixed(3) + "&lamax=" + b.getNorth().toFixed(3) + "&lomax=" + b.getEast().toFixed(3); } catch (e) {}
-    fetch("/api/tracks" + qs).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (d) { drawTracks(d); })
+    fetch("/api/tracks").then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (d) { drawTracks(d); })
       .catch(function () { drawTracks(null); })
       .then(function () { btn.classList.remove("busy"); });
   }
@@ -323,20 +323,15 @@
     d = d || {};
     var planes = d.planes || [], tankers = d.tankers || [];
     planes.forEach(function (p) {
-      if (typeof L.divIcon !== "function") return;
-      var icon = L.divIcon({ className: "trk trk-plane", html: '<span style="transform:rotate(' + (p.heading || 0) + 'deg)">&#9650;</span>', iconSize: [16, 16] });
-      L.marker([p.lat, p.lng], { icon: icon, pane: "tracks", interactive: true })
-        .bindTooltip((p.callsign || "FLIGHT") + (p.alt ? " &middot; " + Math.round(p.alt) + "m" : ""), { className: "mk-tip" })
-        .bindPopup("<b>" + esc(p.callsign || "FLIGHT") + "</b><br>AIRCRAFT<br>ALT " + Math.round(p.alt || 0) + " m<br>HDG " + Math.round(p.heading || 0) + "°", { className: "trk-pop" })
-        .addTo(trackLayer);
+      var m = L.circleMarker([p.lat, p.lng], { renderer: trackRenderer, pane: "tracks", radius: 2.6, color: "#7ad7ff", weight: 0, fillColor: "#7ad7ff", fillOpacity: 0.85 });
+      m.bindPopup("<b>" + esc(p.callsign || "FLIGHT") + "</b><br>AIRCRAFT<br>ALT " + Math.round(p.alt || 0) + " m<br>HDG " + Math.round(p.heading || 0) + "°", { className: "trk-pop" });
+      m.addTo(trackLayer);
     });
     tankers.forEach(function (t) {
-      if (typeof L.divIcon !== "function") return;
-      var icon = L.divIcon({ className: "trk trk-ship", html: "&#9632;", iconSize: [12, 12] });
-      L.marker([t.lat, t.lng], { icon: icon, pane: "tracks", interactive: true })
-        .bindTooltip("TANKER &middot; " + (t.name || "vessel") + (t.sample ? " (sample)" : ""), { className: "mk-tip" })
-        .bindPopup("<b>" + esc(t.name || "vessel") + "</b><br>OIL TANKER" + (t.sample ? '<br><span style="color:#ffb000">SAMPLE POSITION</span>' : ""), { className: "trk-pop" })
-        .addTo(trackLayer);
+      var m = L.circleMarker([t.lat, t.lng], { renderer: trackRenderer, pane: "tracks", radius: 4.2, color: "#ffb000", weight: 1, fillColor: "#ffb000", fillOpacity: 0.85 });
+      m.bindTooltip("TANKER · " + (t.name || "vessel") + (t.sample ? " (sample)" : ""), { className: "mk-tip" });
+      m.bindPopup("<b>" + esc(t.name || "vessel") + "</b><br>OIL TANKER" + (t.sample ? '<br><span style="color:#ffb000">SAMPLE POSITION</span>' : ""), { className: "trk-pop" });
+      m.addTo(trackLayer);
     });
     var n = planes.length + tankers.length, tbtn = document.getElementById("tracksBtn"); if (tbtn) tbtn.textContent = "▲ TRACKS (" + n + ")";
     toast("TACTICAL OVERLAY: " + planes.length + " aircraft, " + tankers.length + " tankers" + (d.planesLive ? "" : " (fallback)"), d.planesLive ? "" : "warn");
@@ -418,7 +413,7 @@
   /* ---------- dossier ---------- */
   function selectStory(id) {
     state.selected = id; var s = byId(id); if (!s) return;
-    closeCountry(); openDossier(s); highlightMarker(id); renderFeed();
+    closeCountry(); openDossier(s); highlightMarker(id); renderFeed(); sfx("select");
     if (map) map.panTo([s.lat, s.lng], { animate: true });
     if (window.history && history.replaceState) { try { history.replaceState(null, "", "#s=" + id); } catch (e) {} }
   }
@@ -460,9 +455,9 @@
   /* ---------- reactions ---------- */
   function setReaction(next) {
     var s = byId(state.selected); if (!s) return;
-    if (next === "interested") { state.reactions[s.id] = "interested"; addUnique(state.profile.interests, [s.category].concat(s.tags)); document.getElementById("dDetail").hidden = false; toast("INTEL EXPANDED. TOPIC BOOSTED: " + s.category); }
-    else if (next === "blocked") { state.reactions[s.id] = "blocked"; addUnique(state.profile.blocked, s.tags); toast("SUPPRESSED: " + (s.tags.join(", ") || s.category), "bad"); }
-    else { delete state.reactions[s.id]; var own = s.tags.map(lc); state.profile.blocked = state.profile.blocked.filter(function (b) { return own.indexOf(lc(b)) === -1; }); document.getElementById("dDetail").hidden = true; toast("ASSESSMENT CLEARED"); }
+    if (next === "interested") { state.reactions[s.id] = "interested"; addUnique(state.profile.interests, [s.category].concat(s.tags)); document.getElementById("dDetail").hidden = false; toast("INTEL EXPANDED. TOPIC BOOSTED: " + s.category); sfx("tick"); }
+    else if (next === "blocked") { state.reactions[s.id] = "blocked"; addUnique(state.profile.blocked, s.tags); toast("SUPPRESSED: " + (s.tags.join(", ") || s.category), "bad"); sfx("cross"); }
+    else { delete state.reactions[s.id]; var own = s.tags.map(lc); state.profile.blocked = state.profile.blocked.filter(function (b) { return own.indexOf(lc(b)) === -1; }); document.getElementById("dDetail").hidden = true; toast("ASSESSMENT CLEARED"); sfx("toggle"); }
     saveReactions(); saveProfile(); setTristate(reactionOf(s));
     if (next === "blocked") closeDossier();
     renderAll();
@@ -505,7 +500,7 @@
 
   /* ---------- live refresh ---------- */
   function refresh(silent) {
-    var btn = document.getElementById("refreshBtn"); btn.classList.add("busy"); setLive("ACQUIRING", true);
+    var btn = document.getElementById("refreshBtn"); btn.classList.add("busy"); setLive("ACQUIRING", true); if (!silent) sfx("refresh");
     fetch("/api/news?blocked=" + encodeURIComponent(state.profile.blocked.join(",")), { headers: { accept: "application/json" } })
       .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
       .then(function (data) {
@@ -540,6 +535,18 @@
   function srcUrl(s) { return s.url || s.source_url || ("https://news.google.com/search?q=" + encodeURIComponent(s.title)); }
   function ageDays(ds) { if (!ds) return 1e9; var d = new Date(ds + "T00:00:00Z"); return isNaN(d.getTime()) ? 1e9 : (Date.now() - d.getTime()) / 86400000; }
   function clockTick() { var d = new Date(); setText("clock", pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds())); }
+  function audio() { if (!soundOn) return null; try { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; if (!actx) actx = new AC(); if (actx.state === "suspended") actx.resume(); return actx; } catch (e) { return null; } }
+  function blip(freq, dur, type, gain) { var a = audio(); if (!a) return; try { var o = a.createOscillator(), g = a.createGain(); o.type = type || "sine"; o.frequency.value = freq; var t = a.currentTime, vol = gain || 0.04; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.08)); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + (dur || 0.08) + 0.02); } catch (e) {} }
+  function sfx(name) {
+    if (!soundOn) return;
+    if (name === "select") blip(660, 0.06, "square", 0.022);
+    else if (name === "tick") { blip(720, 0.06, "sine", 0.04); setTimeout(function () { blip(1080, 0.09, "sine", 0.04); }, 55); }
+    else if (name === "cross") blip(300, 0.13, "sawtooth", 0.04);
+    else if (name === "refresh") { blip(440, 0.05, "sine", 0.03); setTimeout(function () { blip(880, 0.12, "sine", 0.03); }, 70); }
+    else if (name === "country") blip(420, 0.18, "sine", 0.04);
+    else if (name === "toggle") blip(600, 0.05, "square", 0.022);
+    else if (name === "boot") { blip(330, 0.12, "sine", 0.03); setTimeout(function () { blip(660, 0.18, "sine", 0.03); }, 130); }
+  }
   var toastTimer = null;
   function toast(msg, kind) { var t = document.getElementById("toast"); t.className = "toast show" + (kind ? " " + kind : ""); t.textContent = msg; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = "toast"; }, 3200); }
 
@@ -551,10 +558,11 @@
     var cpc = document.getElementById("cpClose"); if (cpc) cpc.onclick = closeCountry;
     var si = document.getElementById("feedSearch"); if (si) si.oninput = function () { state.search = si.value.trim().toLowerCase(); renderFeed(); renderMarkers(); updateCounts(); };
     var rb = document.getElementById("resetBtn"); if (rb) rb.onclick = resetProfile;
-    var lb = document.getElementById("linksBtn"); if (lb) lb.onclick = function () { state.showLinks = !state.showLinks; lb.classList.toggle("on", state.showLinks); lb.setAttribute("aria-pressed", state.showLinks ? "true" : "false"); renderLinks(); };
+    var lb = document.getElementById("linksBtn"); if (lb) lb.onclick = function () { state.showLinks = !state.showLinks; lb.classList.toggle("on", state.showLinks); lb.setAttribute("aria-pressed", state.showLinks ? "true" : "false"); sfx("toggle"); renderLinks(); };
     var tb = document.getElementById("tracksBtn"); if (tb) tb.onclick = toggleTracks;
-    var ib = document.getElementById("intelBtn"); if (ib) ib.onclick = function () { state.interestedOnly = !state.interestedOnly; ib.setAttribute("aria-pressed", state.interestedOnly ? "true" : "false"); renderAll(); };
-    var fx = document.getElementById("fxBtn"); if (fx) fx.onclick = function () { state.fx = !state.fx; applyFx(); saveJSON(LS.fx, state.fx); fx.classList.toggle("on", state.fx); fx.setAttribute("aria-pressed", state.fx ? "true" : "false"); };
+    var ib = document.getElementById("intelBtn"); if (ib) ib.onclick = function () { state.interestedOnly = !state.interestedOnly; ib.setAttribute("aria-pressed", state.interestedOnly ? "true" : "false"); sfx("toggle"); renderAll(); };
+    var fx = document.getElementById("fxBtn"); if (fx) fx.onclick = function () { state.fx = !state.fx; applyFx(); saveJSON(LS.fx, state.fx); fx.classList.toggle("on", state.fx); fx.setAttribute("aria-pressed", state.fx ? "true" : "false"); sfx("toggle"); };
+    var sb = document.getElementById("soundBtn"); if (sb) sb.onclick = function () { soundOn = !soundOn; saveJSON("omni_snd_v1", soundOn); sb.classList.toggle("on", soundOn); sb.setAttribute("aria-pressed", soundOn ? "true" : "false"); if (soundOn) sfx("toggle"); };
     var hb = document.getElementById("helpBtn"); if (hb) hb.onclick = function () { toggleHelp(); };
     var hc = document.getElementById("helpClose"); if (hc) hc.onclick = function () { toggleHelp(false); };
     var eb = document.getElementById("exportBtn"); if (eb) eb.onclick = exportProfile;
@@ -576,6 +584,7 @@
   }
 
   function boot() {
+    sfx("boot");
     var lines = ["ESTABLISHING UPLINK...", "DECRYPTING FEEDS...", "PLOTTING CONTACTS...", "OMNISCIENCE ONLINE"], i = 0, bl = document.getElementById("bootLine");
     var iv = setInterval(function () { i++; if (bl && lines[i]) bl.textContent = lines[i]; }, 320);
     setTimeout(function () { clearInterval(iv); var b = document.getElementById("boot"); if (b) b.classList.add("hidden"); }, 1400);

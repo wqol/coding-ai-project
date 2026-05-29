@@ -41,8 +41,9 @@ a real news API and geocode results there.
 
 ## Tactical tracking (TRACKS button)
 
-`api/tracks.js` returns live aircraft from the free OpenSky Network API (no key;
-anonymous is rate limited, so it falls back to sample positions on failure).
+`api/tracks.js` returns live aircraft worldwide from the free OpenSky Network API
+(no key; up to 2000 rendered on a Leaflet canvas layer for performance; anonymous
+is rate limited, so it falls back to sample positions on failure).
 Optional `OPENSKY_USER` / `OPENSKY_PASS` env raises limits. Oil tankers are
 representative SAMPLE positions at major chokepoints; real global AIS needs a
 keyed feed (wire one in `api/tracks.js`, e.g. `AISSTREAM_API_KEY`) to go live.
@@ -64,8 +65,13 @@ keyed feed (wire one in `api/tracks.js`, e.g. `AISSTREAM_API_KEY`) to go live.
 - SUPPRESS blocks the story's specific tags (exact match), not its whole
   category, so muting one story does not wipe an unrelated topic. Scoring uses
   exact token overlap (no loose substring matching).
-- Interactive countries: clicking a country opens a brief panel listing its
-  local stories (point-in-polygon) and pulls fresh country news when a key is set.
+- Interactive countries: clicking a country opens a brief with the latest stories
+  for that country (point-in-polygon), always shown in full regardless of your
+  personalization/suppression, and pulls fresh country news when a key is set.
+- Sound: synthesized WebAudio cues for select / tick / cross / refresh / country /
+  toggles (SOUND button, persisted). A slow radar sweep adds the control-room feel.
+- Advanced controls (FX, LINKS, EXPORT, IMPORT, RESET) live in the MANUAL panel
+  to keep the main view clean; the map shows only TRACKS, INTEL, SOUND, MANUAL.
 - Map controls: LINKS (topic connection lines), TRACKS (aircraft + tanker
   overlay), INTEL ONLY (show only flagged stories), a lat/long graticule, a
   day/night terminator, and low-zoom marker clustering. Plus a marker legend,
