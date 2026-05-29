@@ -7,7 +7,7 @@
   var PRIO_RADIUS = { critical: 11, high: 8, medium: 6, low: 4.5 };
   var PRIO_WEIGHT = { critical: 3, high: 2, medium: 1, low: 0 };
   var STALE_MS = 30 * 60 * 1000;
-  var LS = { profile: "omni_profile_v1", reactions: "omni_reactions_v1", live: "omni_live_v1", meta: "omni_meta_v1", view: "omni_view_v1" };
+  var LS = { profile: "omni_profile_v1", reactions: "omni_reactions_v1", live: "omni_live_v1", meta: "omni_meta_v1", view: "omni_view_v1", fx: "omni_fx_v1" };
   var COUNTRIES_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
   var seed = window.OMNI_SEED || { interests: [], stories: [] };
@@ -20,6 +20,7 @@
     interestedOnly: false,
     sort: "relevance",
     critOnly: false,
+    fx: loadJSON("omni_fx_v1", !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)),
     showLinks: false,
     showTracks: false,
     trackTimer: null,
@@ -280,7 +281,7 @@
   /* ---------- tracks (planes + tankers) ---------- */
   function toggleTracks() {
     state.showTracks = !state.showTracks;
-    var btn = document.getElementById("tracksBtn"); btn.classList.toggle("on", state.showTracks);
+    var btn = document.getElementById("tracksBtn"); btn.classList.toggle("on", state.showTracks); btn.setAttribute("aria-pressed", state.showTracks ? "true" : "false");
     if (state.trackTimer) { clearInterval(state.trackTimer); state.trackTimer = null; }
     if (!state.showTracks) { if (trackLayer) trackLayer.clearLayers(); btn.textContent = "▲ TRACKS"; return; }
     fetchTracks();
@@ -386,6 +387,7 @@
     state.selected = id; var s = byId(id); if (!s) return;
     closeCountry(); openDossier(s); highlightMarker(id); renderFeed();
     if (map) map.panTo([s.lat, s.lng], { animate: true });
+    if (window.history && history.replaceState) { try { history.replaceState(null, "", "#s=" + id); } catch (e) {} }
   }
   function byId(id) { var a = allStories(); for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i]; return null; }
   function openDossier(s) {
@@ -417,6 +419,7 @@
   function closeDossier(keepCountry) {
     var d = document.getElementById("dossier"); d.classList.remove("open"); d.setAttribute("aria-hidden", "true");
     state.selected = null; highlightMarker(null); if (!keepCountry) renderFeed();
+    if (!keepCountry && window.history && history.replaceState) { try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} }
   }
   function setTristate(rxn) { document.querySelectorAll("#tristate .tri").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-state") === rxn); }); }
 
@@ -436,6 +439,33 @@
     state.filters = new Set(CATS); state.search = ""; state.interestedOnly = false;
     var si = document.getElementById("feedSearch"); if (si) si.value = "";
     saveProfile(); saveReactions(); closeDossier(); toast("PROFILE RESET TO BASELINE"); renderAll();
+  }
+  function applyFx() { document.body.classList.toggle("no-fx", !state.fx); }
+  function toggleHelp(force) {
+    var o = document.getElementById("helpOverlay"); if (!o) return;
+    var open = force === undefined ? !o.classList.contains("open") : force;
+    o.classList.toggle("open", open); o.setAttribute("aria-hidden", open ? "false" : "true");
+  }
+  function exportProfile() {
+    try {
+      var data = JSON.stringify({ profile: state.profile, reactions: state.reactions, exported: new Date().toISOString() }, null, 2);
+      var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+      a.download = "omniscience-profile.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      toast("PROFILE EXPORTED");
+    } catch (e) { toast("EXPORT FAILED", "bad"); }
+  }
+  function importProfile(file) {
+    if (!file) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var o = JSON.parse(rd.result);
+        if (o.profile && Array.isArray(o.profile.interests)) state.profile = { interests: o.profile.interests, blocked: o.profile.blocked || [] };
+        if (o.reactions && typeof o.reactions === "object") state.reactions = o.reactions;
+        saveProfile(); saveReactions(); closeDossier(); renderAll(); toast("PROFILE IMPORTED");
+      } catch (e) { toast("IMPORT FAILED: bad file", "bad"); }
+    };
+    rd.readAsText(file);
   }
 
   /* ---------- live refresh ---------- */
@@ -485,14 +515,21 @@
     var cpc = document.getElementById("cpClose"); if (cpc) cpc.onclick = closeCountry;
     var si = document.getElementById("feedSearch"); if (si) si.oninput = function () { state.search = si.value.trim().toLowerCase(); renderFeed(); renderMarkers(); updateCounts(); };
     var rb = document.getElementById("resetBtn"); if (rb) rb.onclick = resetProfile;
-    var lb = document.getElementById("linksBtn"); if (lb) lb.onclick = function () { state.showLinks = !state.showLinks; lb.classList.toggle("on", state.showLinks); renderLinks(); };
+    var lb = document.getElementById("linksBtn"); if (lb) lb.onclick = function () { state.showLinks = !state.showLinks; lb.classList.toggle("on", state.showLinks); lb.setAttribute("aria-pressed", state.showLinks ? "true" : "false"); renderLinks(); };
     var tb = document.getElementById("tracksBtn"); if (tb) tb.onclick = toggleTracks;
-    var ib = document.getElementById("intelBtn"); if (ib) ib.onclick = function () { state.interestedOnly = !state.interestedOnly; renderAll(); };
+    var ib = document.getElementById("intelBtn"); if (ib) ib.onclick = function () { state.interestedOnly = !state.interestedOnly; ib.setAttribute("aria-pressed", state.interestedOnly ? "true" : "false"); renderAll(); };
+    var fx = document.getElementById("fxBtn"); if (fx) fx.onclick = function () { state.fx = !state.fx; applyFx(); saveJSON(LS.fx, state.fx); fx.classList.toggle("on", state.fx); fx.setAttribute("aria-pressed", state.fx ? "true" : "false"); };
+    var hb = document.getElementById("helpBtn"); if (hb) hb.onclick = function () { toggleHelp(); };
+    var hc = document.getElementById("helpClose"); if (hc) hc.onclick = function () { toggleHelp(false); };
+    var eb = document.getElementById("exportBtn"); if (eb) eb.onclick = exportProfile;
+    var imb = document.getElementById("importBtn"), imf = document.getElementById("importFile");
+    if (imb && imf) { imb.onclick = function () { imf.click(); }; imf.onchange = function () { importProfile(imf.files && imf.files[0]); }; }
     document.querySelectorAll(".srt").forEach(function (b) { b.onclick = function () { state.sort = b.getAttribute("data-sort"); document.querySelectorAll(".srt").forEach(function (x) { x.classList.toggle("on", x === b); }); renderAll(); }; });
     document.querySelectorAll("#tristate .tri").forEach(function (b) { b.onclick = function () { setReaction(b.getAttribute("data-state")); }; });
     document.addEventListener("keydown", function (e) {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
-      if (e.key === "Escape") { closeDossier(); closeCountry(); }
+      if (e.key === "Escape") { closeDossier(); closeCountry(); toggleHelp(false); }
+      else if (e.key === "?") { e.preventDefault(); toggleHelp(); }
       else if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); navMove(1); }
       else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); navMove(-1); }
     });
@@ -505,7 +542,8 @@
   }
 
   function init() {
-    initMap(); wire(); renderLegend(); clockTick(); setInterval(clockTick, 1000); stamp(); renderAll(); boot();
+    initMap(); wire(); renderLegend(); applyFx(); clockTick(); setInterval(clockTick, 1000); stamp(); renderAll(); boot();
+    var hm = (location.hash.match(/s=([\w-]+)/) || [])[1]; if (hm && byId(hm)) selectStory(hm);
     if (meta.liveOk && state.lastRefresh && (Date.now() - state.lastRefresh.getTime() > STALE_MS)) refresh(true);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();

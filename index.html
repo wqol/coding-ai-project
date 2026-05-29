@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OMNISCIENCE // INTEL</title>
+  <meta name="description" content="Omniscience Intel - a personalized tactical world-news intelligence map with live tracking." />
+  <meta name="theme-color" content="#05080d" />
+  <meta property="og:title" content="Omniscience Intel" />
+  <meta property="og:description" content="Personalized tactical world-news intelligence map." />
+  <link rel="icon" href="icon.svg" />
+  <link rel="manifest" href="manifest.json" />
   <link rel="preconnect" href="https://unpkg.com" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -60,7 +66,12 @@
     </div>
     <div class="rail-foot">
       <span id="profileSummary" class="muted"></span>
-      <button id="resetBtn" class="btn-reset" title="Clear personalization and restore baseline">RESET PROFILE</button>
+      <div class="foot-btns">
+        <button id="exportBtn" class="btn-reset" title="Download your profile as JSON">EXPORT</button>
+        <button id="importBtn" class="btn-reset" title="Load a profile JSON">IMPORT</button>
+        <button id="resetBtn" class="btn-reset" title="Clear personalization and restore baseline">RESET</button>
+      </div>
+      <input id="importFile" type="file" accept="application/json" style="display:none" />
     </div>
   </aside>
 
@@ -72,9 +83,11 @@
     <div class="map-corner tl"></div><div class="map-corner tr"></div>
     <div class="map-corner bl"></div><div class="map-corner br"></div>
     <div id="mapControls" class="map-controls">
-      <button id="linksBtn" class="mc-btn" title="Toggle topic connection lines">LINKS</button>
-      <button id="tracksBtn" class="mc-btn" title="Live aircraft + tanker overlay">&#9650; TRACKS</button>
-      <button id="intelBtn" class="mc-btn" title="Show only stories you flagged as MORE INTEL">&#10003; INTEL ONLY</button>
+      <button id="linksBtn" class="mc-btn" title="Toggle topic connection lines" aria-pressed="false">LINKS</button>
+      <button id="tracksBtn" class="mc-btn" title="Live aircraft + tanker overlay" aria-pressed="false">&#9650; TRACKS</button>
+      <button id="intelBtn" class="mc-btn" title="Show only stories you flagged as MORE INTEL" aria-pressed="false">&#10003; INTEL ONLY</button>
+      <button id="fxBtn" class="mc-btn on" title="Toggle visual effects (scanlines, glow, motion)" aria-pressed="true">FX</button>
+      <button id="helpBtn" class="mc-btn" title="Operations manual / keyboard shortcuts">? MANUAL</button>
     </div>
     <div id="mapBadge" class="map-badge">GLOBAL THEATER &middot; <span id="badgeCount">0</span> CONTACTS</div>
     <div id="legend" class="legend"></div>
@@ -126,7 +139,30 @@
     <div id="cpList" class="cp-list"></div>
   </section>
 
-  <div id="toast" class="toast" aria-hidden="true"></div>
+  <div id="helpOverlay" class="help-overlay" aria-hidden="true">
+    <div class="help-card">
+      <button id="helpClose" class="dossier-close" title="Close">&times;</button>
+      <div class="dossier-class">// OPERATIONS MANUAL</div>
+      <h2 class="dossier-title">OMNISCIENCE // INTEL</h2>
+      <div class="help-grid">
+        <div><span class="k">click marker / feed</span> open dossier</div>
+        <div><span class="k">j / k or arrows</span> step through feed</div>
+        <div><span class="k">MORE INTEL</span> expand + boost topic</div>
+        <div><span class="k">SUPPRESS</span> hide + block topic</div>
+        <div><span class="k">click a country</span> country intel brief</div>
+        <div><span class="k">TRACKS</span> live aircraft + tankers</div>
+        <div><span class="k">LINKS</span> topic connection lines</div>
+        <div><span class="k">INTEL ONLY</span> show flagged only</div>
+        <div><span class="k">SORT</span> relevance / new / priority</div>
+        <div><span class="k">CRITICAL</span> critical-only filter</div>
+        <div><span class="k">search box</span> filter the feed</div>
+        <div><span class="k">Esc</span> close panels</div>
+      </div>
+      <div class="help-foot muted">Personalization is stored locally in your browser; use EXPORT / IMPORT to move it. Set ANTHROPIC_API_KEY in Vercel for live news + country briefs.</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-hidden="true"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
