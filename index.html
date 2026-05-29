@@ -42,6 +42,12 @@
     <div class="rail-section">
       <div class="rail-head">PRIORITY FEED</div>
       <input id="feedSearch" class="feed-search" type="text" placeholder="// filter signal..." autocomplete="off" />
+      <div class="sort-row">
+        <span class="srt-label">SORT</span>
+        <button class="srt on" data-sort="relevance">REL</button>
+        <button class="srt" data-sort="recent">NEW</button>
+        <button class="srt" data-sort="priority">PRI</button>
+      </div>
       <div id="feed" class="feed"></div>
     </div>
     <div class="rail-section filters">
@@ -85,7 +91,7 @@
         <span id="dCoords" class="muted">--</span>
       </div>
       <div class="dossier-meta">
-        <span id="dSource">--</span>
+        <a id="dSource" class="dossier-src" target="_blank" rel="noopener">--</a>
         <span id="dDate" class="muted">--</span>
         <span id="dPriority" class="prio">--</span>
       </div>
@@ -97,6 +103,7 @@
         <p id="dDetailText"></p>
       </div>
       <div id="dTags" class="dossier-tags"></div>
+      <div id="dRelated" class="dossier-related"></div>
     </div>
     <div class="dossier-actions">
       <div class="actions-label">ASSESSMENT</div>

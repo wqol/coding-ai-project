@@ -18,6 +18,8 @@
     filters: new Set(CATS),
     search: "",
     interestedOnly: false,
+    sort: "relevance",
+    critOnly: false,
     showLinks: false,
     showTracks: false,
     selected: null,
@@ -88,14 +90,18 @@
   function isVisible(s) {
     if (isBlocked(s) || !state.filters.has(s.category) || !searchMatch(s)) return false;
     if (state.interestedOnly && reactionOf(s) !== "interested") return false;
+    if (state.critOnly && s.priority !== "critical") return false;
     return true;
   }
   function ranked() {
     var iTok = interestTokens();
+    var byScore = function (a, b) { return scoreWith(b, iTok) - scoreWith(a, iTok); };
+    var byPrio = function (a, b) { return (PRIO_WEIGHT[b.priority] || 0) - (PRIO_WEIGHT[a.priority] || 0); };
+    var byDate = function (a, b) { return String(b.published_date || "").localeCompare(String(a.published_date || "")); };
     return allStories().slice().sort(function (a, b) {
-      var d = scoreWith(b, iTok) - scoreWith(a, iTok); if (d) return d;
-      var pd = (PRIO_WEIGHT[b.priority] || 0) - (PRIO_WEIGHT[a.priority] || 0); if (pd) return pd;
-      return String(b.published_date || "").localeCompare(String(a.published_date || ""));
+      if (state.sort === "recent") return byDate(a, b) || byScore(a, b);
+      if (state.sort === "priority") return byPrio(a, b) || byScore(a, b) || byDate(a, b);
+      return byScore(a, b) || byPrio(a, b) || byDate(a, b);
     });
   }
   function visibleRanked() { return ranked().filter(isVisible); }
@@ -294,6 +300,7 @@
         '<div><div class="feed-title">' + esc(s.title) + "</div>" +
         '<div class="feed-meta"><span class="feed-cat-dot"></span>' + esc(s.location_name || "") +
         ' <span class="feed-prio' + prioCls + '">' + esc(s.priority) + "</span>" +
+        ' <span class="feed-age">' + esc(timeAgo(s.published_date)) + "</span>" +
         (reactionOf(s) === "interested" ? ' <span class="feed-flag">&#10003;</span>' : "") + "</div>" +
         '<div class="feed-bar" title="relevance ' + rel + '%"><span style="width:' + rel + '%"></span></div></div>';
       item.onclick = function () { selectStory(s.id); };
@@ -309,6 +316,10 @@
       chip.onclick = function () { if (state.filters.has(c)) state.filters.delete(c); else state.filters.add(c); renderAll(); };
       box.appendChild(chip);
     });
+    var crit = document.createElement("div");
+    crit.className = "chip crit" + (state.critOnly ? " on" : ""); crit.textContent = "CRITICAL";
+    crit.onclick = function () { state.critOnly = !state.critOnly; renderAll(); };
+    box.appendChild(crit);
   }
   function renderBlocked() {
     var box = document.getElementById("blockedList"), bc = document.getElementById("blockedCount");
@@ -345,15 +356,27 @@
     var d = document.getElementById("dossier"); d.style.setProperty("--c", CAT_COLOR[s.category]);
     setText("dCat", "// " + s.category.toUpperCase()); setText("dTitle", s.title);
     setText("dLoc", s.location_name || "UNKNOWN"); setText("dCoords", s.lat.toFixed(3) + ", " + s.lng.toFixed(3));
-    setText("dSource", s.source || ""); setText("dDate", s.published_date || "");
+    var srcEl = document.getElementById("dSource"); if (srcEl) { srcEl.textContent = (s.source || "SOURCE") + " ↗"; srcEl.href = srcUrl(s); }
+    setText("dDate", (s.published_date || "") + (timeAgo(s.published_date) ? " · " + timeAgo(s.published_date) : ""));
     var pr = document.getElementById("dPriority"); pr.textContent = s.priority.toUpperCase(); pr.className = "prio " + s.priority;
     setText("dSummary", s.summary || "");
     var detail = document.getElementById("dDetail"); setText("dDetailText", s.detailed_intel || s.summary || "");
     var rxn = reactionOf(s); detail.hidden = rxn !== "interested";
     var tags = document.getElementById("dTags"); tags.innerHTML = "";
     s.tags.forEach(function (t) { var e = document.createElement("span"); e.className = "tag"; e.textContent = t; tags.appendChild(e); });
-    setTristate(rxn);
+    setTristate(rxn); renderRelated(s);
     d.classList.add("open"); d.setAttribute("aria-hidden", "false");
+  }
+  function renderRelated(s) {
+    var box = document.getElementById("dRelated"); if (!box) return;
+    var tags = s.tags.map(lc);
+    var rel = allStories().filter(function (o) { return o.id !== s.id && !isBlocked(o) && o.tags.some(function (t) { return tags.indexOf(lc(t)) !== -1; }); }).slice(0, 4);
+    box.innerHTML = rel.length ? '<div class="related-head">// RELATED INTEL</div>' : "";
+    rel.forEach(function (o) {
+      var el = document.createElement("div"); el.className = "related-item"; el.style.setProperty("--c", CAT_COLOR[o.category]);
+      el.textContent = o.title; el.onclick = function () { selectStory(o.id); };
+      box.appendChild(el);
+    });
   }
   function closeDossier(keepCountry) {
     var d = document.getElementById("dossier"); d.classList.remove("open"); d.setAttribute("aria-hidden", "true");
@@ -412,6 +435,8 @@
   function setText(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; }
   function pad(n) { return String(n).padStart(2, "0"); }
   function hhmm(d) { return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()); }
+  function timeAgo(ds) { if (!ds) return ""; var d = new Date(ds + "T00:00:00Z"); if (isNaN(d.getTime())) return ds; var days = Math.round((Date.now() - d.getTime()) / 86400000); if (days <= 0) return "today"; if (days === 1) return "1d ago"; if (days < 30) return days + "d ago"; if (days < 365) return Math.round(days / 30) + "mo ago"; return ds; }
+  function srcUrl(s) { return s.url || s.source_url || ("https://news.google.com/search?q=" + encodeURIComponent(s.title)); }
   function clockTick() { var d = new Date(); setText("clock", pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds())); }
   var toastTimer = null;
   function toast(msg, kind) { var t = document.getElementById("toast"); t.className = "toast show" + (kind ? " " + kind : ""); t.textContent = msg; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = "toast"; }, 3200); }
@@ -427,6 +452,7 @@
     var lb = document.getElementById("linksBtn"); if (lb) lb.onclick = function () { state.showLinks = !state.showLinks; lb.classList.toggle("on", state.showLinks); renderLinks(); };
     var tb = document.getElementById("tracksBtn"); if (tb) tb.onclick = toggleTracks;
     var ib = document.getElementById("intelBtn"); if (ib) ib.onclick = function () { state.interestedOnly = !state.interestedOnly; renderAll(); };
+    document.querySelectorAll(".srt").forEach(function (b) { b.onclick = function () { state.sort = b.getAttribute("data-sort"); document.querySelectorAll(".srt").forEach(function (x) { x.classList.toggle("on", x === b); }); renderAll(); }; });
     document.querySelectorAll("#tristate .tri").forEach(function (b) { b.onclick = function () { setReaction(b.getAttribute("data-state")); }; });
     document.addEventListener("keydown", function (e) {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;

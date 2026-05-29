@@ -199,3 +199,19 @@ button{font-family:inherit; cursor:pointer}
 .cp-card-title{font-size:13px; color:#dbe9f7; line-height:1.25}
 .cp-card-meta{font-size:10px; color:var(--muted); margin-top:4px}
 .cp-live{font-size:11px; padding:6px 2px}
+
+/* wave 1: sort, crit, age, source, related */
+.sort-row{display:flex; align-items:center; gap:5px; margin-bottom:8px}
+.srt-label{font-size:9px; color:var(--muted); letter-spacing:.16em; margin-right:2px}
+.srt{background:rgba(255,255,255,.02); border:1px solid var(--line); color:var(--muted); font-size:10px; letter-spacing:.08em; padding:4px 8px; border-radius:2px}
+.srt:hover{color:#cde; border-color:var(--line-strong)}
+.srt.on{color:#04121a; background:var(--cyan); border-color:var(--cyan)}
+.chip.crit{border-color:rgba(255,91,91,.5); color:var(--red)}
+.chip.crit.on{background:var(--red); color:#1a0606; border-color:var(--red); box-shadow:0 0 8px rgba(255,91,91,.4)}
+.feed-age{color:var(--muted)}
+.dossier-src{color:var(--cyan); text-decoration:none; border-bottom:1px dotted rgba(34,211,238,.4)}
+.dossier-src:hover{color:#7ce7fb; border-bottom-color:var(--cyan)}
+.dossier-related{margin-top:16px; border-top:1px solid var(--line); padding-top:12px}
+.related-head{font-size:10px; letter-spacing:.2em; color:var(--muted); margin-bottom:8px}
+.related-item{font-size:12px; color:#bcd0e2; line-height:1.3; padding:6px 8px; border-left:2px solid var(--c,#456); background:rgba(255,255,255,.015); margin-bottom:5px; cursor:pointer; transition:.12s}
+.related-item:hover{background:rgba(34,211,238,.07); color:#eaf6ff}
