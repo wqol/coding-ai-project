@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OMNISCIENCE // INTEL</title>
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Saira+Condensed:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="boot" class="boot">
+    <div class="boot-inner">
+      <div class="boot-title">OMNISCIENCE // INTEL</div>
+      <div class="boot-line" id="bootLine">ESTABLISHING UPLINK...</div>
+      <div class="boot-bar"><span></span></div>
+    </div>
+  </div>
+
+  <header id="topbar" class="topbar">
+    <div class="brand">
+      <span class="brand-mark">&#9678;</span>
+      <span class="brand-name">OMNISCIENCE</span><span class="brand-sub">// INTEL</span>
+    </div>
+    <div class="status-cluster">
+      <div class="stat"><label>UTC</label><span id="clock">--:--:--</span></div>
+      <div class="stat"><label>TRACKED</label><span id="countTotal">0</span></div>
+      <div class="stat"><label>PRIORITY</label><span id="countPriority">0</span></div>
+      <div class="stat"><label>SUPPRESSED</label><span id="countBlocked">0</span></div>
+      <div class="stat"><label>SYNC</label><span id="lastRefresh">--</span></div>
+      <div class="stat live"><span class="dot"></span><span id="liveLabel">LIVE</span></div>
+      <button id="refreshBtn" class="btn-refresh" title="Pull latest intel">&#8635; REFRESH FEED</button>
+    </div>
+  </header>
+
+  <aside id="rail" class="rail">
+    <div class="rail-section">
+      <div class="rail-head">PRIORITY FEED</div>
+      <div id="feed" class="feed"></div>
+    </div>
+    <div class="rail-section filters">
+      <div class="rail-head">FILTERS</div>
+      <div id="filters" class="chips"></div>
+    </div>
+    <div class="rail-section blocked">
+      <div class="rail-head">SUPPRESSED TOPICS <span id="blockedCount" class="muted">0</span></div>
+      <div id="blockedList" class="blocked-list"></div>
+    </div>
+    <div class="rail-foot">
+      <span id="profileSummary" class="muted"></span>
+    </div>
+  </aside>
+
+  <main id="mapwrap" class="mapwrap">
+    <div id="map"></div>
+    <div class="map-overlay grid"></div>
+    <div class="map-overlay scan"></div>
+    <div class="map-overlay vignette"></div>
+    <div class="map-corner tl"></div><div class="map-corner tr"></div>
+    <div class="map-corner bl"></div><div class="map-corner br"></div>
+    <div id="mapBadge" class="map-badge">GLOBAL THEATER &middot; <span id="badgeCount">0</span> CONTACTS</div>
+  </main>
+
+  <section id="dossier" class="dossier" aria-hidden="true">
+    <button id="dossierClose" class="dossier-close" title="Close">&times;</button>
+    <div class="dossier-head">
+      <div class="dossier-class">// CLASSIFIED INTEL DOSSIER</div>
+      <div id="dCat" class="dossier-cat">CATEGORY</div>
+      <h2 id="dTitle" class="dossier-title">--</h2>
+      <div class="dossier-meta">
+        <span id="dLoc">--</span>
+        <span id="dCoords" class="muted">--</span>
+      </div>
+      <div class="dossier-meta">
+        <span id="dSource">--</span>
+        <span id="dDate" class="muted">--</span>
+        <span id="dPriority" class="prio">--</span>
+      </div>
+    </div>
+    <div class="dossier-body">
+      <p id="dSummary" class="dossier-summary">--</p>
+      <div id="dDetail" class="dossier-detail" hidden>
+        <div class="detail-head">// EXPANDED INTEL</div>
+        <p id="dDetailText"></p>
+      </div>
+      <div id="dTags" class="dossier-tags"></div>
+    </div>
+    <div class="dossier-actions">
+      <div class="actions-label">ASSESSMENT</div>
+      <div class="tristate" id="tristate">
+        <button class="tri tri-none" data-state="none">NONE</button>
+        <button class="tri tri-up" data-state="interested">&#10003; MORE INTEL</button>
+        <button class="tri tri-down" data-state="blocked">&#10007; SUPPRESS</button>
+      </div>
+      <div id="actionHint" class="action-hint muted">MORE INTEL expands detail and boosts this topic. SUPPRESS hides it and blocks the topic.</div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" aria-hidden="true"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

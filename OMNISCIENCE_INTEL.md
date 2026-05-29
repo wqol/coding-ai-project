@@ -1,81 +1,82 @@
 # Omniscience Intel
 
-A personalized world-news intelligence map, built on Base44. Top news stories
-render as glowing markers placed at their real geographic location on a dark
-tactical world map (Black Ops / Palantir Gotham aesthetic). Each story carries a
-tri-state control that drives an evolving personalization profile.
+A personalized world-news intelligence map. Top stories render as glowing markers
+at their real geographic location on a dark tactical world map (Black Ops /
+Palantir Gotham vibe). Each story carries a tri-state control that drives an
+evolving personalization profile stored in your browser.
 
-- App ID: `6a198e95e95a7f343578de72`
-- Editor / preview: https://app.base44.com/apps/6a198e95e95a7f343578de72/editor/preview
-- Owner account: jameseagle2323@gmail.com
+Standalone static app: HTML + CSS + vanilla JS with Leaflet for the map. No build
+step and no backend required. An optional serverless endpoint adds live,
+web-grounded refresh. (Originally prototyped on the Base44 builder, then
+reimplemented here as a self-contained app so it runs without Base44.)
 
-This repo does not hold the app source. The app is built and hosted on Base44 and
-edited through the Base44 editor (the AI builder owns the codegen). This file is
-the design record and operating notes.
+## Run locally
 
-## What it does
+Any static server works, for example:
 
-- World map command center. Full-screen near-black world map, faint cyan lat/long
-  grid, scanline and vignette overlays. Each story is a glowing marker at its
-  coordinates, colored by category (geopolitics amber, markets cyan, technology
-  teal, science green) and sized/glowing by priority, with critical stories
-  pulsing. Overlapping markers are jittered.
-- Dossier panel. Clicking a marker slides in a dossier with corner brackets and a
-  classification-style header: title, coordinates, source, published date, summary,
-  and the tri-state control.
-- Tri-state control (per story):
-  - NONE: default, no signal.
-  - MORE INTEL (tick): marks interested, expands the dossier to the longer
-    `detailed_intel`, and appends the story's category and tags to the user's
-    interests.
-  - SUPPRESS (cross): hides the story and adds its category and tags to
-    `blacklisted_topics` so that topic never appears again.
-- Personalization. Stories are filtered against `blacklisted_topics` and ranked by
-  how well their category and tags match the interests list. Higher-relevance and
-  higher-priority stories get larger, brighter markers and sit at the top of the
-  PRIORITY FEED rail. Coverage stays broad; personalization changes emphasis and
-  ordering.
-- Live news. A REFRESH FEED control pulls current top stories via Base44's
-  internet-grounded LLM across geopolitics, markets/finance, AI/technology, and
-  science/space, skips blacklisted topics, geolocates each story, and saves them.
-  Auto-refreshes on load when data is older than 30 minutes. Refresh is additive
-  and de-dupes by title (it does not wipe the feed or reacted stories).
+    python3 -m http.server 8099
+    # then open http://localhost:8099
 
-## Data model (Base44 entities)
+Map tiles and fonts load from CDNs, so the browser needs internet. The 19 seed
+stories are bundled in `data.js` and work offline.
 
-- `NewsStory`: title, summary, detailed_intel, category, source, location_name,
-  latitude, longitude, priority (critical/high/medium/low), status
-  (unread/acknowledged/flagged/dismissed), tags[], published_date, image_url.
-  `flagged` = MORE INTEL, `dismissed` = SUPPRESS.
-- `UserPreference` (one per user): interests[], blacklisted_topics[], last_refresh.
-  The evolving personalization memory.
-- `User`: built-in Base44 user (role).
+## Deploy (Vercel)
+
+Push to the repo. Vercel serves the static root and the `/api` function
+automatically, no config needed. This repo is already wired to Vercel, so each
+push redeploys the preview.
+
+## Live refresh (optional)
+
+By default, REFRESH FEED runs on the bundled dataset and reports "no live source
+configured". To enable live, web-grounded news:
+
+- Set `ANTHROPIC_API_KEY` in the Vercel project env (optionally `OMNI_MODEL`).
+- `api/news.js` then uses Claude with the web-search tool to return current,
+  geolocated stories as JSON; the app merges them in (additive, deduped by title,
+  blocked topics skipped).
+
+Live AI output should be sanity-checked. For hard sourcing, swap `api/news.js` for
+a real news API and geocode results there.
+
+## Features
+
+- World-map command center: dark CARTO basemap, cyan lat/long grid, scanlines,
+  corner brackets. Markers are colored by category (geopolitics amber, markets
+  cyan, technology teal, science green) and sized/pulsing by priority; overlapping
+  markers are jittered.
+- Dossier panel on marker or feed click: title, coordinates, source, date,
+  summary, tags, and the tri-state control.
+- Tri-state per story: NONE; MORE INTEL (tick) expands `detailed_intel` and boosts
+  the topic; SUPPRESS (cross) hides it and blocks the topic.
+- Personalization: ranks and filters against your interest profile, removes
+  blocked topics, keeps a PRIORITY FEED rail synced with the map, category
+  filters, and a suppressed-topics list with one-click restore.
+- State persists in `localStorage` (profile, per-story reactions, live cache).
+
+## Files
+
+- `index.html`, `styles.css`, `app.js`
+- `data.js` - bundled stories + seed interest profile
+- `api/news.js` - optional live endpoint (safe fallback when no key set)
+
+## Data model (per story)
+
+`title`, `summary`, `detailed_intel`, `category` (geopolitics|markets|technology|
+science), `source`, `location_name`, `lat`, `lng`, `priority`
+(critical|high|medium|low), `tags[]`, `published_date`.
 
 ## Personalization seed
 
-Personalization was originally requested as "use memory and look at all chats."
-No chat history is accessible in the build environment, so the interest profile was
-seeded directly from the user's supplied profile and refined by the tri-state
-learning loop. Seed interests span quant finance and markets, AI/ML and big tech,
-physics and particle/quantum science, startups and founders, geopolitics, plus
-personal niches (powerlifting, chess). Copy is kept terse and ASCII.
+Seeded from the user's supplied profile: quant finance and markets, AI/ML and big
+tech, physics and space science, startups, geopolitics, plus personal niches.
+The original "use memory and read all my chats" was not possible (no accessible
+chat history), so the profile is seeded directly and refined by the tick/cross
+learning loop.
 
-## How it was built
+## Known limitations
 
-1. `create_base44_app` with the verbatim request (Base44 named it "Omniscience Intel").
-2. Seeded `UserPreference` (interest profile) and an initial set of real, current,
-   geolocated `NewsStory` records pulled from live web search.
-3. Edit 1: tri-state control semantics, personalization ranking, live news refresh.
-4. Edit 2: tactical command-center theme, map markers, dossier panel, loading state.
-5. Edit 3: single-preference merge + additive (non-destructive) refresh.
-
-## Known limitations / next steps
-
-- LLM-grounded news can surface current-sounding but unverified specifics. For
-  reliable sourcing, wire a real news API (e.g. via a Base44 backend function) and
-  treat the LLM only for geolocation/summarization.
-- Single-user assumption. Designed as a personal feed; multi-user would need
-  per-user `UserPreference` scoping verified end to end.
-- Reaction history lives on the story record; persistent learning lives in
-  `UserPreference` (survives refresh). Consider a dedicated reaction log if you want
-  per-story history independent of the story set.
+- Map tiles and fonts need network on the browser side; story data is bundled.
+- Live AI refresh can surface current-sounding but unverified specifics; a real
+  news API is the recommended path for hard sourcing.
+- Personalization is single-user and local (localStorage), not multi-device.
