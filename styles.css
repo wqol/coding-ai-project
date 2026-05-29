@@ -254,3 +254,8 @@ body.no-fx .map-overlay.scan, body.no-fx .map-overlay.grid{display:none}
   .rail{display:flex !important; position:fixed; top:var(--topbar-h); left:0; bottom:0; width:280px; transform:translateX(-100%); transition:transform .25s; z-index:1300; box-shadow:6px 0 30px rgba(0,0,0,.55)}
   body.rail-open .rail{transform:none}
 }
+
+/* wave 7: clustering + copy link */
+.leaflet-div-icon.mk-cluster{background:rgba(34,211,238,.14); border:1px solid var(--cyan); border-radius:50%; color:#d6f6ff; display:flex; align-items:center; justify-content:center; font-family:"Share Tech Mono",monospace; font-size:11px; box-shadow:0 0 12px rgba(34,211,238,.45)}
+.copy-link{margin-top:10px; width:100%; background:rgba(34,211,238,.06); border:1px solid var(--line); color:var(--cyan); font-size:11px; letter-spacing:.1em; padding:8px; border-radius:2px; transition:.14s}
+.copy-link:hover{background:rgba(34,211,238,.14); border-color:var(--line-strong)}

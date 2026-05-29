@@ -125,6 +125,7 @@
     var v = loadJSON(LS.view, null);
     if (v && v.c) { try { map.setView(v.c, v.z); } catch (e) {} }
     map.on("moveend zoomend", function () { try { saveJSON(LS.view, { c: [map.getCenter().lat, map.getCenter().lng], z: map.getZoom() }); } catch (e) {} });
+    map.on("zoomend", renderMarkers);
     loadCountries();
   }
   function drawGraticule() {
@@ -165,10 +166,21 @@
     });
     return out;
   }
+  function clusterize(list, zoom) {
+    if (zoom >= 4) return list.map(function (s) { return { lat: s.lat, lng: s.lng, story: s }; });
+    var cell = zoom <= 2 ? 22 : 11, groups = {};
+    list.forEach(function (s) { var k = Math.floor(s.lat / cell) + ":" + Math.floor(s.lng / cell); (groups[k] = groups[k] || []).push(s); });
+    return Object.keys(groups).map(function (k) {
+      var g = groups[k]; if (g.length === 1) return { lat: g[0].lat, lng: g[0].lng, story: g[0] };
+      var la = 0, ln = 0; g.forEach(function (s) { la += s.lat; ln += s.lng; }); return { lat: la / g.length, lng: ln / g.length, items: g };
+    });
+  }
   function renderMarkers() {
     if (!markerLayer) return;
     markerLayer.clearLayers(); markerById = {};
-    jitter(visibleRanked()).forEach(function (s) {
+    var vis = visibleRanked(), zoom = (map && map.getZoom) ? map.getZoom() : 3;
+    var entries = clusterize(vis, zoom);
+    jitter(entries.filter(function (e) { return e.story; }).map(function (e) { return e.story; })).forEach(function (s) {
       var color = CAT_COLOR[s.category] || "#22d3ee";
       var cls = "mk cat-" + s.category + (s.priority === "critical" ? " critical" : "");
       var m = L.circleMarker([s.lat, s.lng], { radius: PRIO_RADIUS[s.priority] || 6, color: color, weight: 2, fillColor: color, fillOpacity: 0.35, className: cls });
@@ -176,8 +188,14 @@
       m.bindTooltip(s.title, { direction: "top", className: "mk-tip", opacity: 0.95 });
       m.addTo(markerLayer); markerById[s.id] = m;
     });
+    entries.filter(function (e) { return e.items; }).forEach(function (c) {
+      if (typeof L.divIcon !== "function") return;
+      var icon = L.divIcon({ className: "mk-cluster", html: "<span>" + c.items.length + "</span>", iconSize: [28, 28] });
+      var cz = zoom;
+      L.marker([c.lat, c.lng], { icon: icon }).on("click", function () { if (map) { try { map.setView([c.lat, c.lng], Math.min(cz + 3, 6)); } catch (e) {} } }).addTo(markerLayer);
+    });
     highlightMarker(state.selected);
-    var badge = document.getElementById("badgeCount"); if (badge) badge.textContent = visibleRanked().length;
+    var badge = document.getElementById("badgeCount"); if (badge) badge.textContent = vis.length;
     renderLinks();
   }
   function highlightMarker(id) {
@@ -541,6 +559,7 @@
     if (imb && imf) { imb.onclick = function () { imf.click(); }; imf.onchange = function () { importProfile(imf.files && imf.files[0]); }; }
     var rt = document.getElementById("railToggle"); if (rt) rt.onclick = function () { document.body.classList.toggle("rail-open"); };
     var rj = document.getElementById("regionJump"); if (rj) rj.onchange = function () { var b = REGIONS[rj.value]; if (b && map) { try { map.fitBounds(b); } catch (e) {} } };
+    var cl = document.getElementById("dCopyLink"); if (cl) cl.onclick = function () { try { if (navigator.clipboard) navigator.clipboard.writeText(location.href); toast("LINK COPIED"); } catch (e) { toast("COPY FAILED", "bad"); } };
     document.querySelectorAll(".srt").forEach(function (b) { b.onclick = function () { state.sort = b.getAttribute("data-sort"); document.querySelectorAll(".srt").forEach(function (x) { x.classList.toggle("on", x === b); }); renderAll(); }; });
     document.querySelectorAll("#tristate .tri").forEach(function (b) { b.onclick = function () { setReaction(b.getAttribute("data-state")); }; });
     document.addEventListener("keydown", function (e) {
@@ -566,5 +585,5 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 
-  window.OMNI = { state: state, ranked: ranked, visibleRanked: visibleRanked, isVisible: isVisible, isBlocked: isBlocked, pointInFeature: pointInFeature, storiesInFeature: storiesInFeature, scoreOf: function (s) { return scoreWith(s, interestTokens()); }, navMove: navMove, allStories: allStories };
+  window.OMNI = { state: state, ranked: ranked, visibleRanked: visibleRanked, isVisible: isVisible, isBlocked: isBlocked, pointInFeature: pointInFeature, storiesInFeature: storiesInFeature, clusterize: clusterize, scoreOf: function (s) { return scoreWith(s, interestTokens()); }, navMove: navMove, allStories: allStories };
 })();
