@@ -440,7 +440,8 @@ const WAVE_PUSH=10.0,   // wave energy pushing the board forward (sets ~6 cruise
       GRIP=6.5,         // rail/fin grip: how fast sideways slip becomes forward travel
       PUMP=7.0, BRAKE=6.0,            // W pump thrust / S brake force (slows, won't fully stop)
       TURN_RATE=1.5, YAW_EASE=6.0,    // max carve rate (rad/s) / steering responsiveness
-      CAM_LAZY=1.6;     // how quickly the camera drifts back behind the board
+      CARVE_LEAD=0.40,  // how far the board's nose visually leads into a carve (turn readability)
+      CAM_LAZY=1.4;     // how quickly the camera drifts back behind the board
 let waveTime=0;
 const keys={left:false,right:false,up:false,down:false};
 let airborne=false, vyAir=0, yPos=0, landT=0, impact=0, surfVelS=0, jumpCD=0;
@@ -499,7 +500,7 @@ function frame(){
   // banking (lean into the carve) + fore/aft weight shift from acceleration
   accelLP += ((speed-prevSpeed)/dt - accelLP)*Math.min(1,dt*5); prevSpeed=speed;
   const leanAmt=THREE.MathUtils.clamp(yawRate/TURN_RATE,-1,1);
-  const targetRoll  = leanAmt*(0.30+speed*0.028);                            // lean INTO the turn
+  const targetRoll  = leanAmt*(0.33+speed*0.030);                            // lean INTO the turn
   const targetPitch = (keys.down?0.30:0) + (keys.up?-0.16:0) - accelLP*0.03; // back / forward weight
   rollS  += (targetRoll - rollS )*Math.min(1,dt*5);
   pitchS += (targetPitch- pitchS)*Math.min(1,dt*5);
@@ -524,7 +525,10 @@ function frame(){
   // up vector: clamp so it can never point downward, then limit tilt toward vertical
   _up.set(su.nx, Math.max(su.ny,0.30), su.nz).normalize();
   _up.lerp(WORLD_UP, airborne?0.7:0.45).normalize();   // stable, board doesn't over-tilt
-  _fwd.set(hx,0,hz); _fwd.addScaledVector(_up,-_up.dot(_fwd)).normalize();
+  // cosmetic: the nose leads into the carve so the turn is clearly visible from behind
+  // (the board still travels along its true heading -- this only rotates the visible mesh)
+  const headingVis=heading+CARVE_LEAD*yawRate;
+  _fwd.set(Math.cos(headingVis),0,Math.sin(headingVis)); _fwd.addScaledVector(_up,-_up.dot(_fwd)).normalize();
   _fwd.addScaledVector(_up,0.14).normalize();           // planing nose-up
   _rt.crossVectors(_up,_fwd).normalize(); _up.crossVectors(_fwd,_rt).normalize();
   _m.makeBasis(_fwd,_up,_rt); qTarget.setFromRotationMatrix(_m);
