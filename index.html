@@ -440,7 +440,7 @@ const WAVE_PUSH=10.0,   // wave energy pushing the board forward (sets ~6 cruise
       GRIP=6.5,         // rail/fin grip: how fast sideways slip becomes forward travel
       PUMP=7.0, BRAKE=6.0,            // W pump thrust / S brake force (slows, won't fully stop)
       TURN_RATE=1.5, YAW_EASE=6.0,    // max carve rate (rad/s) / steering responsiveness
-      CARVE_LEAD=0.40,  // how far the board's nose visually leads into a carve (turn readability)
+      CARVE_LEAD=0.20,  // small nose-lead into a carve for readability (mesh faces travel)
       CAM_LAZY=1.4;     // how quickly the camera drifts back behind the board
 let waveTime=0;
 const keys={left:false,right:false,up:false,down:false};
@@ -525,9 +525,13 @@ function frame(){
   // up vector: clamp so it can never point downward, then limit tilt toward vertical
   _up.set(su.nx, Math.max(su.ny,0.30), su.nz).normalize();
   _up.lerp(WORLD_UP, airborne?0.7:0.45).normalize();   // stable, board doesn't over-tilt
-  // cosmetic: the nose leads into the carve so the turn is clearly visible from behind
-  // (the board still travels along its true heading -- this only rotates the visible mesh)
-  const headingVis=heading+CARVE_LEAD*yawRate;
+  // orient the board to its ACTUAL travel direction (velocity) so the surfer always
+  // faces where he's going -- not the steering heading, which the physics lets drift
+  // (gravity down the face + drift). A small carve-lead angles the nose into the turn
+  // for readability. Falls back to heading when nearly stopped (velocity dir is noisy).
+  const tvx = speed>0.8 ? velX/speed : Math.cos(heading);
+  const tvz = speed>0.8 ? velZ/speed : Math.sin(heading);
+  const headingVis = Math.atan2(tvz,tvx) + CARVE_LEAD*yawRate;
   _fwd.set(Math.cos(headingVis),0,Math.sin(headingVis)); _fwd.addScaledVector(_up,-_up.dot(_fwd)).normalize();
   _fwd.addScaledVector(_up,0.14).normalize();           // planing nose-up
   _rt.crossVectors(_up,_fwd).normalize(); _up.crossVectors(_fwd,_rt).normalize();
