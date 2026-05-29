@@ -25,9 +25,12 @@ module.exports = async function handler(req, res) {
   }
 
   const blocked = String((req.query && req.query.blocked) || "").split(",").map(s => s.trim()).filter(Boolean);
+  const country = String((req.query && req.query.country) || "").trim().slice(0, 60);
+  const scope = country
+    ? "the TOP CURRENT real-world news happening in or about " + country + " right now. Return up to 8. Every lat/lng must be inside " + country + "."
+    : "the TOP CURRENT real-world news stories right now across these categories: geopolitics, markets, technology, science. Return the 12 most important.";
   const prompt =
-    "Use web search to find the TOP CURRENT real-world news stories right now across these categories: " +
-    "geopolitics, markets, technology, science. Return the 12 most important." +
+    "Use web search to find " + scope +
     (blocked.length ? " EXCLUDE anything about these blocked topics: " + blocked.join(", ") + "." : "") +
     " Output ONLY a JSON array, no prose. Each item must be: " +
     '{"title": string, "summary": string (max 160 chars), "detailed_intel": string (2-3 sentences), ' +
@@ -80,9 +83,9 @@ function sanitize(arr) {
     category: CATS.includes(String(s.category || "").toLowerCase()) ? String(s.category).toLowerCase() : "geopolitics",
     source: String(s.source || "live"),
     location_name: String(s.location_name || ""),
-    lat: Number(s.lat), lng: Number(s.lng),
+    lat: s.lat == null ? NaN : Number(s.lat), lng: s.lng == null ? NaN : Number(s.lng),
     priority: PRIOS.includes(String(s.priority || "").toLowerCase()) ? String(s.priority).toLowerCase() : "medium",
     tags: Array.isArray(s.tags) ? s.tags.map(String).slice(0, 10) : [],
     published_date: String(s.published_date || new Date().toISOString().slice(0, 10))
-  })).filter(s => s.title && isFinite(s.lat) && isFinite(s.lng));
+  })).filter(s => s.title && Number.isFinite(s.lat) && Number.isFinite(s.lng));
 }

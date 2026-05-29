@@ -39,6 +39,14 @@ configured". To enable live, web-grounded news:
 Live AI output should be sanity-checked. For hard sourcing, swap `api/news.js` for
 a real news API and geocode results there.
 
+## Tactical tracking (TRACKS button)
+
+`api/tracks.js` returns live aircraft from the free OpenSky Network API (no key;
+anonymous is rate limited, so it falls back to sample positions on failure).
+Optional `OPENSKY_USER` / `OPENSKY_PASS` env raises limits. Oil tankers are
+representative SAMPLE positions at major chokepoints; real global AIS needs a
+keyed feed (wire one in `api/tracks.js`, e.g. `AISSTREAM_API_KEY`) to go live.
+
 ## Features
 
 - World-map command center: dark CARTO basemap, cyan lat/long grid, scanlines,
@@ -56,13 +64,22 @@ a real news API and geocode results there.
 - SUPPRESS blocks the story's specific tags (exact match), not its whole
   category, so muting one story does not wipe an unrelated topic. Scoring uses
   exact token overlap (no loose substring matching).
-- State persists in `localStorage` (profile, per-story reactions, live cache).
+- Interactive countries: clicking a country opens a brief panel listing its
+  local stories (point-in-polygon) and pulls fresh country news when a key is set.
+- Map controls: LINKS (topic connection lines), TRACKS (aircraft + tanker
+  overlay), INTEL ONLY (show only flagged stories). Plus a marker legend,
+  per-item relevance bars, keyboard nav (j/k or arrows), and a persisted map view.
+- Auto-refresh on load when the feed is stale (>30 min) and a live source has
+  worked before.
+- State persists in `localStorage` (profile, per-story reactions, live cache,
+  last view, last refresh).
 
 ## Files
 
 - `index.html`, `styles.css`, `app.js`
 - `data.js` - bundled stories + seed interest profile
-- `api/news.js` - optional live endpoint (safe fallback when no key set)
+- `api/news.js` - optional live news endpoint (country-aware; safe fallback)
+- `api/tracks.js` - aircraft (OpenSky) + sample tanker endpoint
 
 ## Data model (per story)
 

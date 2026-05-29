@@ -170,3 +170,32 @@ button{font-family:inherit; cursor:pointer}
 .legend .lg-dot{width:8px; height:8px; border-radius:50%; display:inline-block}
 .leaflet-tooltip.mk-tip{background:rgba(8,13,20,.95); color:#cdeefb; border:1px solid var(--line-strong); border-radius:2px; font-family:"Share Tech Mono",monospace; font-size:11px; letter-spacing:.04em; box-shadow:0 0 12px rgba(0,0,0,.6)}
 .leaflet-tooltip.mk-tip.leaflet-tooltip-top::before{border-top-color:var(--line-strong)}
+
+/* map controls */
+.map-controls{position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:600; display:flex; gap:8px}
+.mc-btn{background:rgba(10,16,24,.86); color:var(--muted); border:1px solid var(--line); padding:7px 11px; font-size:11px; letter-spacing:.1em; border-radius:2px; backdrop-filter:blur(4px); transition:.14s; white-space:nowrap}
+.mc-btn:hover{color:var(--cyan); border-color:var(--line-strong)}
+.mc-btn.on{color:#04121a; background:var(--cyan); border-color:var(--cyan); box-shadow:0 0 12px rgba(34,211,238,.4)}
+.mc-btn.busy{opacity:.55; pointer-events:none}
+
+/* relevance bar */
+.feed-bar{margin-top:6px; height:3px; background:rgba(255,255,255,.06); border-radius:2px; overflow:hidden}
+.feed-bar span{display:block; height:100%; background:var(--c,#22d3ee); box-shadow:0 0 6px var(--c,#22d3ee); opacity:.8}
+
+/* track markers */
+.leaflet-div-icon.trk{background:none; border:none}
+.trk{line-height:1; pointer-events:auto}
+.trk-plane span{display:inline-block; color:#7ad7ff; font-size:13px; text-shadow:0 0 6px #22d3ee}
+.trk-ship{color:var(--amber); font-size:12px; text-shadow:0 0 6px var(--amber)}
+
+/* country panel */
+.country-panel{position:fixed; top:var(--topbar-h); right:0; bottom:0; width:var(--dossier-w); z-index:1100; background:linear-gradient(180deg,rgba(11,17,26,.98),rgba(7,11,17,.98)); border-left:1px solid var(--line-strong); transform:translateX(102%); transition:transform .28s cubic-bezier(.2,.8,.2,1); display:flex; flex-direction:column; box-shadow:-18px 0 40px rgba(0,0,0,.5)}
+.country-panel.open{transform:translateX(0)}
+.cp-head{padding:16px 18px 12px; border-bottom:1px solid var(--line)}
+.cp-list{padding:12px 14px; overflow:auto; flex:1; display:flex; flex-direction:column; gap:8px}
+.cp-card{border:1px solid var(--line); border-left:2px solid var(--c,#456); padding:9px 11px; cursor:pointer; background:rgba(255,255,255,.015); transition:.12s}
+.cp-card:hover{background:rgba(34,211,238,.06); border-color:var(--line-strong)}
+.cp-card-cat{font-size:9.5px; letter-spacing:.16em; color:var(--c,#22d3ee); margin-bottom:4px}
+.cp-card-title{font-size:13px; color:#dbe9f7; line-height:1.25}
+.cp-card-meta{font-size:10px; color:var(--muted); margin-top:4px}
+.cp-live{font-size:11px; padding:6px 2px}

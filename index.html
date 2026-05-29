@@ -30,6 +30,7 @@
       <div class="stat"><label>UTC</label><span id="clock">--:--:--</span></div>
       <div class="stat"><label>TRACKED</label><span id="countTotal">0</span></div>
       <div class="stat"><label>PRIORITY</label><span id="countPriority">0</span></div>
+      <div class="stat"><label>FLAGGED</label><span id="countFlagged">0</span></div>
       <div class="stat"><label>SUPPRESSED</label><span id="countBlocked">0</span></div>
       <div class="stat"><label>SYNC</label><span id="lastRefresh">--</span></div>
       <div class="stat live"><span class="dot"></span><span id="liveLabel">LIVE</span></div>
@@ -64,6 +65,11 @@
     <div class="map-overlay vignette"></div>
     <div class="map-corner tl"></div><div class="map-corner tr"></div>
     <div class="map-corner bl"></div><div class="map-corner br"></div>
+    <div id="mapControls" class="map-controls">
+      <button id="linksBtn" class="mc-btn" title="Toggle topic connection lines">LINKS</button>
+      <button id="tracksBtn" class="mc-btn" title="Live aircraft + tanker overlay">&#9650; TRACKS</button>
+      <button id="intelBtn" class="mc-btn" title="Show only stories you flagged as MORE INTEL">&#10003; INTEL ONLY</button>
+    </div>
     <div id="mapBadge" class="map-badge">GLOBAL THEATER &middot; <span id="badgeCount">0</span> CONTACTS</div>
     <div id="legend" class="legend"></div>
   </main>
@@ -103,10 +109,21 @@
     </div>
   </section>
 
+  <section id="countryPanel" class="country-panel" aria-hidden="true">
+    <button id="cpClose" class="dossier-close" title="Close">&times;</button>
+    <div class="cp-head">
+      <div class="dossier-class">// COUNTRY INTEL BRIEF</div>
+      <h2 id="cpName" class="dossier-title">--</h2>
+      <div id="cpCount" class="muted">0 LOCAL</div>
+    </div>
+    <div id="cpList" class="cp-list"></div>
+  </section>
+
   <div id="toast" class="toast" aria-hidden="true"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <script src="data.js"></script>
   <script src="app.js"></script>
 </body>
