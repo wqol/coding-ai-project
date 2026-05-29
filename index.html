@@ -28,6 +28,7 @@
   </div>
 
   <header id="topbar" class="topbar">
+    <button id="railToggle" class="rail-toggle" title="Toggle feed panel" aria-label="Toggle feed panel">&#9776;</button>
     <div class="brand">
       <span class="brand-mark">&#9678;</span>
       <span class="brand-name">OMNISCIENCE</span><span class="brand-sub">// INTEL</span>
@@ -59,6 +60,21 @@
     <div class="rail-section filters">
       <div class="rail-head">FILTERS</div>
       <div id="filters" class="chips"></div>
+      <div class="jump-row">
+        <span class="srt-label">JUMP</span>
+        <select id="regionJump" class="jump-sel" aria-label="Jump to region">
+          <option value="world">WORLD</option>
+          <option value="americas">AMERICAS</option>
+          <option value="europe">EUROPE</option>
+          <option value="meast">MIDDLE EAST</option>
+          <option value="asia">ASIA</option>
+          <option value="africa">AFRICA</option>
+        </select>
+      </div>
+    </div>
+    <div class="rail-section analytics">
+      <div class="rail-head">SIGNAL BREAKDOWN</div>
+      <div id="breakdown" class="breakdown"></div>
     </div>
     <div class="rail-section blocked">
       <div class="rail-head">SUPPRESSED TOPICS <span id="blockedCount" class="muted">0</span></div>

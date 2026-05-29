@@ -236,3 +236,19 @@ body.no-fx *{animation:none !important; transition:none !important}
 body.no-fx .map-overlay.scan, body.no-fx .map-overlay.grid{display:none}
 @media (max-width:560px){ .help-grid{grid-template-columns:1fr} }
 @media (prefers-reduced-motion: reduce){ *{animation:none !important} .map-overlay.scan{display:none} }
+
+/* wave 5: breakdown, region jump, mobile drawer */
+.rail-toggle{display:none; background:transparent; border:1px solid var(--line); color:var(--cyan); font-size:16px; line-height:1; padding:3px 9px; border-radius:2px; margin-right:10px}
+.jump-row{display:flex; align-items:center; gap:6px; margin-top:8px}
+.jump-sel{flex:1; background:rgba(34,211,238,.05); border:1px solid var(--line); color:#cde; font-family:inherit; font-size:10.5px; letter-spacing:.08em; padding:5px 6px; border-radius:2px; outline:none}
+.breakdown{display:flex; flex-direction:column; gap:5px}
+.bd-row{display:grid; grid-template-columns:38px 1fr 18px; align-items:center; gap:8px; font-size:10px}
+.bd-lab{letter-spacing:.08em}
+.bd-bar{height:5px; background:rgba(255,255,255,.06); border-radius:2px; overflow:hidden}
+.bd-bar span{display:block; height:100%}
+.bd-n{text-align:right; color:var(--muted)}
+@media (max-width:680px){
+  .rail-toggle{display:block}
+  .rail{display:flex !important; position:fixed; top:var(--topbar-h); left:0; bottom:0; width:280px; transform:translateX(-100%); transition:transform .25s; z-index:1300; box-shadow:6px 0 30px rgba(0,0,0,.55)}
+  body.rail-open .rail{transform:none}
+}

@@ -6,6 +6,7 @@
   var CAT_COLOR = { geopolitics: "#ffb000", markets: "#22d3ee", technology: "#2dd4bf", science: "#4ade80" };
   var PRIO_RADIUS = { critical: 11, high: 8, medium: 6, low: 4.5 };
   var PRIO_WEIGHT = { critical: 3, high: 2, medium: 1, low: 0 };
+  var REGIONS = { world: [[-55, -170], [72, 178]], americas: [[-55, -130], [62, -34]], europe: [[35, -12], [62, 42]], meast: [[12, 25], [42, 63]], asia: [[-10, 60], [55, 150]], africa: [[-35, -20], [37, 52]] };
   var STALE_MS = 30 * 60 * 1000;
   var LS = { profile: "omni_profile_v1", reactions: "omni_reactions_v1", live: "omni_live_v1", meta: "omni_meta_v1", view: "omni_view_v1", fx: "omni_fx_v1" };
   var COUNTRIES_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -372,6 +373,17 @@
     var box = document.getElementById("legend"); if (!box) return;
     box.innerHTML = CATS.map(function (c) { return '<span class="lg"><span class="lg-dot" style="background:' + CAT_COLOR[c] + ';box-shadow:0 0 6px ' + CAT_COLOR[c] + '"></span>' + c.toUpperCase() + "</span>"; }).join("");
   }
+  function renderBreakdown() {
+    var box = document.getElementById("breakdown"); if (!box) return;
+    var vis = visibleRanked(), counts = {}; CATS.forEach(function (c) { counts[c] = 0; });
+    vis.forEach(function (s) { if (counts[s.category] != null) counts[s.category]++; });
+    var max = Math.max.apply(null, [1].concat(CATS.map(function (c) { return counts[c]; })));
+    box.innerHTML = CATS.map(function (c) {
+      var w = Math.round((counts[c] / max) * 100);
+      return '<div class="bd-row"><span class="bd-lab" style="color:' + CAT_COLOR[c] + '">' + ({ geopolitics: "GEO", markets: "MKT", technology: "TECH", science: "SCI" }[c] || c.toUpperCase()) +
+        '</span><span class="bd-bar"><span style="width:' + w + "%;background:" + CAT_COLOR[c] + ';box-shadow:0 0 6px ' + CAT_COLOR[c] + '"></span></span><span class="bd-n">' + counts[c] + "</span></div>";
+    }).join("");
+  }
   function updateCounts() {
     var vis = visibleRanked(), flagged = allStories().filter(function (s) { return reactionOf(s) === "interested"; }).length;
     setText("countTotal", vis.length);
@@ -507,7 +519,7 @@
   var toastTimer = null;
   function toast(msg, kind) { var t = document.getElementById("toast"); t.className = "toast show" + (kind ? " " + kind : ""); t.textContent = msg; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = "toast"; }, 3200); }
 
-  function renderAll() { renderFeed(); renderFilters(); renderBlocked(); updateCounts(); renderMarkers(); }
+  function renderAll() { renderFeed(); renderFilters(); renderBlocked(); renderBreakdown(); updateCounts(); renderMarkers(); }
 
   function wire() {
     document.getElementById("refreshBtn").onclick = function () { refresh(false); };
@@ -524,6 +536,8 @@
     var eb = document.getElementById("exportBtn"); if (eb) eb.onclick = exportProfile;
     var imb = document.getElementById("importBtn"), imf = document.getElementById("importFile");
     if (imb && imf) { imb.onclick = function () { imf.click(); }; imf.onchange = function () { importProfile(imf.files && imf.files[0]); }; }
+    var rt = document.getElementById("railToggle"); if (rt) rt.onclick = function () { document.body.classList.toggle("rail-open"); };
+    var rj = document.getElementById("regionJump"); if (rj) rj.onchange = function () { var b = REGIONS[rj.value]; if (b && map) { try { map.fitBounds(b); } catch (e) {} } };
     document.querySelectorAll(".srt").forEach(function (b) { b.onclick = function () { state.sort = b.getAttribute("data-sort"); document.querySelectorAll(".srt").forEach(function (x) { x.classList.toggle("on", x === b); }); renderAll(); }; });
     document.querySelectorAll("#tristate .tri").forEach(function (b) { b.onclick = function () { setReaction(b.getAttribute("data-state")); }; });
     document.addEventListener("keydown", function (e) {
